@@ -1,24 +1,4 @@
 approvers:
-- justinsb
-- nckturner
-- M00nF1sh
-- leakingtapan
-- andrewsykim
-- wongma7
-- ayberk
-reviewers:
-- justinsb
-- nckturner
-- M00nF1sh
-- leakingtapan
-- andrewsykim
-- wongma7
-- ayberk
-emeritus_approvers:
-- zmerlynn
-- gnufied
-- jsafrane
-- micahhausler
-- mcrute
-- gyuho
-- d-nishi
+- JoelSpeed 
+- Danil-Grigorev
+- elmiko
