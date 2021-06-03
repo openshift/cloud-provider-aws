@@ -1,0 +1,16 @@
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.8 as builder
+
+WORKDIR /build
+COPY . .
+RUN GO111MODULE=on CGO_ENABLED=0 GOOS=${GOOS} GOPROXY=${GOPROXY} go build \
+	-ldflags="-w -s -X 'main.version=${VERSION}'" \
+	-o=aws-cloud-controller-manager \
+	cmd/aws-cloud-controller-manager/main.go
+
+FROM registry.ci.openshift.org/ocp/4.8:base
+
+LABEL description="AWS Cloud Controller Manager"
+
+COPY --from=builder /build/aws-cloud-controller-manager /bin/aws-cloud-controller-manager
+
+ENTRYPOINT [ "/bin/aws-cloud-controller-manager" ]
