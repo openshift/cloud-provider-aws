@@ -2,3 +2,6 @@ approvers:
 - JoelSpeed 
 - Danil-Grigorev
 - elmiko
+
+component: "Cloud Compute"
+subcomponent: "Cloud Controller Manager"
