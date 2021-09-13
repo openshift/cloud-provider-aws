@@ -10,16 +10,15 @@ require (
 	github.com/stretchr/testify v1.7.0
 	gopkg.in/gcfg.v1 v1.2.0
 	gopkg.in/warnings.v0 v0.1.1 // indirect
-	k8s.io/api v0.20.0
-	k8s.io/apimachinery v0.20.0
-	k8s.io/apiserver v0.20.0
-	k8s.io/client-go v0.20.0
-	k8s.io/cloud-provider v0.20.0
-	k8s.io/code-generator v0.20.0
-	k8s.io/component-base v0.20.0
-	k8s.io/csi-translation-lib v0.20.0
-	k8s.io/klog/v2 v2.5.0
-	k8s.io/kubelet v0.20.0
-	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
+	k8s.io/api v0.22.1
+	k8s.io/apimachinery v0.22.1
+	k8s.io/client-go v0.22.1
+	k8s.io/cloud-provider v0.22.1
+	k8s.io/code-generator v0.22.1
+	k8s.io/component-base v0.22.1
+	k8s.io/csi-translation-lib v0.22.1
+	k8s.io/klog/v2 v2.9.0
+	k8s.io/kubelet v0.22.1
+	k8s.io/utils v0.0.0-20210707171843-4b05e18ac7d9
 	sigs.k8s.io/yaml v1.2.0
 )
