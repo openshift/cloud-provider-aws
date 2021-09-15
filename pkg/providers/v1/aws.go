@@ -1,5 +1,3 @@
-// +build !providerless
-
 /*
 Copyright 2014 The Kubernetes Authors.
 
@@ -24,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"path"
 	"regexp"
 	"sort"
@@ -35,7 +34,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
@@ -50,6 +48,7 @@ import (
 	"gopkg.in/gcfg.v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
+	netutils "k8s.io/utils/net"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -233,6 +232,16 @@ const ServiceAnnotationLoadBalancerEIPAllocations = "service.beta.kubernetes.io/
 // For example: "Key1=Val1,Key2=Val2,KeyNoVal1=,KeyNoVal2"
 const ServiceAnnotationLoadBalancerTargetNodeLabels = "service.beta.kubernetes.io/aws-load-balancer-target-node-labels"
 
+// ServiceAnnotationLoadBalancerSubnets is the annotation used on the service to specify the
+// Availability Zone configuration for the load balancer. The values are comma separated list of
+// subnetID or subnetName from different AZs
+// By default, the controller will auto-discover the subnets. If there are multiple subnets per AZ, auto-discovery
+// will break the tie in the following order -
+//   1. prefer the subnet with the correct role tag. kubernetes.io/role/elb for public and kubernetes.io/role/internal-elb for private access
+//   2. prefer the subnet with the cluster tag kubernetes.io/cluster/<Cluster Name>
+//   3. prefer the subnet that is first in lexicographic order
+const ServiceAnnotationLoadBalancerSubnets = "service.beta.kubernetes.io/aws-load-balancer-subnets"
+
 // Event key when a volume is stuck on attaching state when being attached to a volume
 const volumeAttachmentStuck = "VolumeAttachmentStuck"
 
@@ -271,6 +280,12 @@ const (
 	// Number of node names that can be added to a filter. The AWS limit is 200
 	// but we are using a lower limit on purpose
 	filterNodeLimit = 150
+
+	// fargateNodeNamePrefix string is added to awsInstance nodeName and providerID of Fargate nodes.
+	fargateNodeNamePrefix = "fargate-"
+
+	// privateDNSNamePrefix is the prefix added to ENI Private DNS Name.
+	privateDNSNamePrefix = "ip-"
 )
 
 const (
@@ -355,6 +370,8 @@ type EC2 interface {
 	ModifyInstanceAttribute(request *ec2.ModifyInstanceAttributeInput) (*ec2.ModifyInstanceAttributeOutput, error)
 
 	DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
+
+	DescribeNetworkInterfaces(input *ec2.DescribeNetworkInterfacesInput) (*ec2.DescribeNetworkInterfacesOutput, error)
 }
 
 // ELB is a simple pass-through of AWS' ELB client interface, which allows for testing
@@ -622,6 +639,9 @@ type CloudConfig struct {
 		//yourself in an non-AWS cloud and open an issue, please indicate that in the
 		//issue body.
 		DisableStrictZoneCheck bool
+
+		// NodeIPFamilies determines which IP addresses are added to node objects and their ordering.
+		NodeIPFamilies []string
 	}
 	// [ServiceOverride "1"]
 	//  Service = s3
@@ -811,8 +831,11 @@ func (p *awsSDKProvider) Compute(regionName string) (EC2, error) {
 	}
 	awsConfig = awsConfig.WithCredentialsChainVerboseErrors(true).
 		WithEndpointResolver(p.cfg.getResolver())
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
+	})
 
-	sess, err := session.NewSession(awsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 	}
@@ -833,8 +856,10 @@ func (p *awsSDKProvider) LoadBalancing(regionName string) (ELB, error) {
 	}
 	awsConfig = awsConfig.WithCredentialsChainVerboseErrors(true).
 		WithEndpointResolver(p.cfg.getResolver())
-
-	sess, err := session.NewSession(awsConfig)
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 	}
@@ -851,8 +876,10 @@ func (p *awsSDKProvider) LoadBalancingV2(regionName string) (ELBV2, error) {
 	}
 	awsConfig = awsConfig.WithCredentialsChainVerboseErrors(true).
 		WithEndpointResolver(p.cfg.getResolver())
-
-	sess, err := session.NewSession(awsConfig)
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 	}
@@ -870,8 +897,10 @@ func (p *awsSDKProvider) Autoscaling(regionName string) (ASG, error) {
 	}
 	awsConfig = awsConfig.WithCredentialsChainVerboseErrors(true).
 		WithEndpointResolver(p.cfg.getResolver())
-
-	sess, err := session.NewSession(awsConfig)
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 	}
@@ -901,8 +930,10 @@ func (p *awsSDKProvider) KeyManagement(regionName string) (KMS, error) {
 	}
 	awsConfig = awsConfig.WithCredentialsChainVerboseErrors(true).
 		WithEndpointResolver(p.cfg.getResolver())
-
-	sess, err := session.NewSession(awsConfig)
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 	}
@@ -959,6 +990,15 @@ func (s *awsSdkEC2) DescribeInstances(request *ec2.DescribeInstancesInput) ([]*e
 	timeTaken := time.Since(requestTime).Seconds()
 	recordAWSMetric("describe_instance", timeTaken, nil)
 	return results, nil
+}
+
+// DescribeNetworkInterfaces describes network interface provided in the input.
+func (s *awsSdkEC2) DescribeNetworkInterfaces(input *ec2.DescribeNetworkInterfacesInput) (*ec2.DescribeNetworkInterfacesOutput, error) {
+	requestTime := time.Now()
+	resp, err := s.ec2.DescribeNetworkInterfaces(input)
+	timeTaken := time.Since(requestTime).Seconds()
+	recordAWSMetric("describe_network_interfaces", timeTaken, err)
+	return resp, err
 }
 
 // Implements EC2.DescribeSecurityGroups
@@ -1160,30 +1200,28 @@ func init() {
 			return nil, fmt.Errorf("unable to validate custom endpoint overrides: %v", err)
 		}
 
-		sess, err := session.NewSession(&aws.Config{})
+		sess, err := session.NewSessionWithOptions(session.Options{
+			Config:            aws.Config{},
+			SharedConfigState: session.SharedConfigEnable,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 		}
 
-		var provider credentials.Provider
-		if cfg.Global.RoleARN == "" {
-			provider = &ec2rolecreds.EC2RoleProvider{
-				Client: ec2metadata.New(sess),
-			}
-		} else {
+		var creds *credentials.Credentials
+		if cfg.Global.RoleARN != "" {
 			klog.Infof("Using AWS assumed role %v", cfg.Global.RoleARN)
-			provider = &stscreds.AssumeRoleProvider{
+			provider := &stscreds.AssumeRoleProvider{
 				Client:  sts.New(sess),
 				RoleARN: cfg.Global.RoleARN,
 			}
-		}
 
-		creds := credentials.NewChainCredentials(
-			[]credentials.Provider{
-				&credentials.EnvProvider{},
-				provider,
-				&credentials.SharedCredentialsProvider{},
-			})
+			creds = credentials.NewChainCredentials(
+				[]credentials.Provider{
+					&credentials.EnvProvider{},
+					provider,
+				})
+		}
 
 		aws := newAWSSDKProvider(creds, cfg)
 		return newAWSCloud(*cfg, aws)
@@ -1351,6 +1389,12 @@ func newAWSCloud(cfg CloudConfig, awsServices Services) (*Cloud, error) {
 			return nil, err
 		}
 	}
+
+	if len(cfg.Global.NodeIPFamilies) == 0 {
+		cfg.Global.NodeIPFamilies = []string{"ipv4"}
+	}
+	klog.Infof("The following IP families will be added to nodes: %v", cfg.Global.NodeIPFamilies)
+
 	return awsCloud, nil
 }
 
@@ -1439,99 +1483,209 @@ func (c *Cloud) HasClusterID() bool {
 	return len(c.tagging.clusterID()) > 0
 }
 
+// isAWSNotFound returns true if the error was caused by an AWS API 404 response.
+func isAWSNotFound(err error) bool {
+	if err != nil {
+		var aerr awserr.RequestFailure
+		if errors.As(err, &aerr) {
+			return aerr.StatusCode() == http.StatusNotFound
+		}
+	}
+	return false
+}
+
 // NodeAddresses is an implementation of Instances.NodeAddresses.
 func (c *Cloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.NodeAddress, error) {
-	if c.selfAWSInstance.nodeName == name || len(name) == 0 {
-		addresses := []v1.NodeAddress{}
+	addresses := []v1.NodeAddress{}
 
-		macs, err := c.metadata.GetMetadata("network/interfaces/macs/")
-		if err != nil {
-			return nil, fmt.Errorf("error querying AWS metadata for %q: %q", "network/interfaces/macs", err)
-		}
-
-		// We want the IPs to end up in order by interface (in particular, we want eth0's
-		// IPs first), but macs isn't necessarily sorted in that order so we have to
-		// explicitly order by device-number (device-number == the "0" in "eth0").
-
-		var macIDs []string
-		macDevNum := make(map[string]int)
-		for _, macID := range strings.Split(macs, "\n") {
-			if macID == "" {
-				continue
-			}
-			numPath := path.Join("network/interfaces/macs/", macID, "device-number")
-			numStr, err := c.metadata.GetMetadata(numPath)
-			if err != nil {
-				return nil, fmt.Errorf("error querying AWS metadata for %q: %q", numPath, err)
-			}
-			num, err := strconv.Atoi(strings.TrimSpace(numStr))
-			if err != nil {
-				klog.Warningf("Bad device-number %q for interface %s\n", numStr, macID)
-				continue
-			}
-			macIDs = append(macIDs, macID)
-			macDevNum[macID] = num
-		}
-
-		// Sort macIDs by interface device-number
-		sort.Slice(macIDs, func(i, j int) bool {
-			return macDevNum[macIDs[i]] < macDevNum[macIDs[j]]
-		})
-
-		for _, macID := range macIDs {
-			ipPath := path.Join("network/interfaces/macs/", macID, "local-ipv4s")
-			internalIPs, err := c.metadata.GetMetadata(ipPath)
-			if err != nil {
-				return nil, fmt.Errorf("error querying AWS metadata for %q: %q", ipPath, err)
-			}
-
-			for _, internalIP := range strings.Split(internalIPs, "\n") {
-				if internalIP == "" {
-					continue
+	for _, family := range c.cfg.Global.NodeIPFamilies {
+		switch family {
+		case "ipv4":
+			if c.selfAWSInstance.nodeName == name || len(name) == 0 {
+				addrs, err := c.ipv4AddressesFromMetadata()
+				if err != nil {
+					return nil, err
 				}
-				addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: internalIP})
+				addresses = append(addresses, addrs...)
+			} else {
+				instance, err := c.getInstanceByNodeName(name)
+				if err != nil {
+					return nil, fmt.Errorf("getInstanceByNodeName failed for %q with %q", name, err)
+				}
+
+				addrs, err := extractIPv4NodeAddresses(instance)
+				if err != nil {
+					return nil, fmt.Errorf("getInstanceByNodeName failed for %q with %q", name, err)
+				}
+				addresses = append(addresses, addrs...)
+			}
+		case "ipv6":
+			if c.selfAWSInstance.nodeName == name || len(name) == 0 {
+				addrs, err := c.ipv6AddressesFromMetadata()
+				if err != nil {
+					return nil, err
+				}
+				addresses = append(addresses, addrs...)
+			} else {
+				instance, err := c.getInstanceByNodeName(name)
+				if err != nil {
+					return nil, fmt.Errorf("getInstanceByNodeName failed for %q with %q", name, err)
+				}
+
+				addrs, err := extractIPv6NodeAddresses(instance)
+				if err != nil {
+					return nil, fmt.Errorf("getInstanceByNodeName failed for %q with %q", name, err)
+				}
+				addresses = append(addresses, addrs...)
 			}
 		}
-
-		externalIP, err := c.metadata.GetMetadata("public-ipv4")
-		if err != nil {
-			//TODO: It would be nice to be able to determine the reason for the failure,
-			// but the AWS client masks all failures with the same error description.
-			klog.V(4).Info("Could not determine public IP from AWS metadata.")
-		} else {
-			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeExternalIP, Address: externalIP})
-		}
-
-		localHostname, err := c.metadata.GetMetadata("local-hostname")
-		if err != nil || len(localHostname) == 0 {
-			//TODO: It would be nice to be able to determine the reason for the failure,
-			// but the AWS client masks all failures with the same error description.
-			klog.V(4).Info("Could not determine private DNS from AWS metadata.")
-		} else {
-			hostname, internalDNS := parseMetadataLocalHostname(localHostname)
-			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeHostName, Address: hostname})
-			for _, d := range internalDNS {
-				addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalDNS, Address: d})
-			}
-		}
-
-		externalDNS, err := c.metadata.GetMetadata("public-hostname")
-		if err != nil || len(externalDNS) == 0 {
-			//TODO: It would be nice to be able to determine the reason for the failure,
-			// but the AWS client masks all failures with the same error description.
-			klog.V(4).Info("Could not determine public DNS from AWS metadata.")
-		} else {
-			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeExternalDNS, Address: externalDNS})
-		}
-
-		return addresses, nil
 	}
+	return addresses, nil
+}
 
-	instance, err := c.getInstanceByNodeName(name)
+func (c *Cloud) ipv4AddressesFromMetadata() ([]v1.NodeAddress, error) {
+	addresses := []v1.NodeAddress{}
+
+	macs, err := c.metadata.GetMetadata("network/interfaces/macs/")
 	if err != nil {
-		return nil, fmt.Errorf("getInstanceByNodeName failed for %q with %q", name, err)
+		return nil, fmt.Errorf("error querying AWS metadata for %q: %q", "network/interfaces/macs", err)
 	}
-	return extractNodeAddresses(instance)
+
+	// We want the IPs to end up in order by interface (in particular, we want eth0's
+	// IPs first), but macs isn't necessarily sorted in that order so we have to
+	// explicitly order by device-number (device-number == the "0" in "eth0").
+
+	var macIDs []string
+	macDevNum := make(map[string]int)
+	for _, macID := range strings.Split(macs, "\n") {
+		if macID == "" {
+			continue
+		}
+		numPath := path.Join("network/interfaces/macs/", macID, "device-number")
+		numStr, err := c.metadata.GetMetadata(numPath)
+		if err != nil {
+			return nil, fmt.Errorf("error querying AWS metadata for %q: %q", numPath, err)
+		}
+		num, err := strconv.Atoi(strings.TrimSpace(numStr))
+		if err != nil {
+			klog.Warningf("Bad device-number %q for interface %s\n", numStr, macID)
+			continue
+		}
+		macIDs = append(macIDs, macID)
+		macDevNum[macID] = num
+	}
+
+	// Sort macIDs by interface device-number
+	sort.Slice(macIDs, func(i, j int) bool {
+		return macDevNum[macIDs[i]] < macDevNum[macIDs[j]]
+	})
+
+	for _, macID := range macIDs {
+		ipPath := path.Join("network/interfaces/macs/", macID, "local-ipv4s")
+		internalIPs, err := c.metadata.GetMetadata(ipPath)
+		if err != nil {
+			return nil, fmt.Errorf("error querying AWS metadata for %q: %q", ipPath, err)
+		}
+
+		for _, internalIP := range strings.Split(internalIPs, "\n") {
+			if internalIP == "" {
+				continue
+			}
+			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: internalIP})
+		}
+	}
+
+	externalIP, err := c.metadata.GetMetadata("public-ipv4")
+	if err != nil {
+		//TODO: It would be nice to be able to determine the reason for the failure,
+		// but the AWS client masks all failures with the same error description.
+		klog.V(4).Info("Could not determine public IP from AWS metadata.")
+	} else {
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeExternalIP, Address: externalIP})
+	}
+
+	localHostname, err := c.metadata.GetMetadata("local-hostname")
+	if err != nil || len(localHostname) == 0 {
+		//TODO: It would be nice to be able to determine the reason for the failure,
+		// but the AWS client masks all failures with the same error description.
+		klog.V(4).Info("Could not determine private DNS from AWS metadata.")
+	} else {
+		hostname, internalDNS := parseMetadataLocalHostname(localHostname)
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeHostName, Address: hostname})
+		for _, d := range internalDNS {
+			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalDNS, Address: d})
+		}
+	}
+
+	externalDNS, err := c.metadata.GetMetadata("public-hostname")
+	if err != nil || len(externalDNS) == 0 {
+		//TODO: It would be nice to be able to determine the reason for the failure,
+		// but the AWS client masks all failures with the same error description.
+		klog.V(4).Info("Could not determine public DNS from AWS metadata.")
+	} else {
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeExternalDNS, Address: externalDNS})
+	}
+
+	return addresses, nil
+}
+
+func (c *Cloud) ipv6AddressesFromMetadata() ([]v1.NodeAddress, error) {
+	addresses := []v1.NodeAddress{}
+
+	macs, err := c.metadata.GetMetadata("network/interfaces/macs/")
+	if err != nil {
+		return nil, fmt.Errorf("error querying AWS metadata for %q: %q", "network/interfaces/macs", err)
+	}
+
+	// We want the IPs to end up in order by interface (in particular, we want eth0's
+	// IPs first), but macs isn't necessarily sorted in that order so we have to
+	// explicitly order by device-number (device-number == the "0" in "eth0").
+
+	var macIDs []string
+	macDevNum := make(map[string]int)
+	for _, macID := range strings.Split(macs, "\n") {
+		if macID == "" {
+			continue
+		}
+		numPath := path.Join("network/interfaces/macs/", macID, "device-number")
+		numStr, err := c.metadata.GetMetadata(numPath)
+		if err != nil {
+			return nil, fmt.Errorf("error querying AWS metadata for %q: %q", numPath, err)
+		}
+		num, err := strconv.Atoi(strings.TrimSpace(numStr))
+		if err != nil {
+			klog.Warningf("Bad device-number %q for interface %s\n", numStr, macID)
+			continue
+		}
+		macIDs = append(macIDs, macID)
+		macDevNum[macID] = num
+	}
+
+	// Sort macIDs by interface device-number
+	sort.Slice(macIDs, func(i, j int) bool {
+		return macDevNum[macIDs[i]] < macDevNum[macIDs[j]]
+	})
+
+	for _, macID := range macIDs {
+		ipv6Path := path.Join("network/interfaces/macs/", macID, "ipv6s")
+		internalIPv6s, err := c.metadata.GetMetadata(ipv6Path)
+		if isAWSNotFound(err) {
+			// 404 -> no IPv6 addresses
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("error querying AWS metadata for %q: %q", ipv6Path, err)
+		}
+		// return only the "first" address for each ENI
+		for _, internalIPv6 := range strings.Split(internalIPv6s, "\n") {
+			if internalIPv6 == "" {
+				continue
+			}
+			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: internalIPv6})
+			break
+		}
+	}
+
+	return addresses, nil
 }
 
 // parseMetadataLocalHostname parses the output of "local-hostname" metadata.
@@ -1554,8 +1708,9 @@ func parseMetadataLocalHostname(metadata string) (string, []string) {
 	return hostname, internalDNS
 }
 
-// extractNodeAddresses maps the instance information from EC2 to an array of NodeAddresses
-func extractNodeAddresses(instance *ec2.Instance) ([]v1.NodeAddress, error) {
+// extractIPv4NodeAddresses maps the instance information from EC2 to an array of NodeAddresses.
+// This function will extract private and public IP addresses and their corresponding DNS names.
+func extractIPv4NodeAddresses(instance *ec2.Instance) ([]v1.NodeAddress, error) {
 	// Not clear if the order matters here, but we might as well indicate a sensible preference order
 
 	if instance == nil {
@@ -1573,7 +1728,7 @@ func extractNodeAddresses(instance *ec2.Instance) ([]v1.NodeAddress, error) {
 
 		for _, internalIP := range networkInterface.PrivateIpAddresses {
 			if ipAddress := aws.StringValue(internalIP.PrivateIpAddress); ipAddress != "" {
-				ip := net.ParseIP(ipAddress)
+				ip := netutils.ParseIPSloppy(ipAddress)
 				if ip == nil {
 					return nil, fmt.Errorf("EC2 instance had invalid private address: %s (%q)", aws.StringValue(instance.InstanceId), ipAddress)
 				}
@@ -1585,7 +1740,7 @@ func extractNodeAddresses(instance *ec2.Instance) ([]v1.NodeAddress, error) {
 	// TODO: Other IP addresses (multiple ips)?
 	publicIPAddress := aws.StringValue(instance.PublicIpAddress)
 	if publicIPAddress != "" {
-		ip := net.ParseIP(publicIPAddress)
+		ip := netutils.ParseIPSloppy(publicIPAddress)
 		if ip == nil {
 			return nil, fmt.Errorf("EC2 instance had invalid public address: %s (%s)", aws.StringValue(instance.InstanceId), publicIPAddress)
 		}
@@ -1606,6 +1761,46 @@ func extractNodeAddresses(instance *ec2.Instance) ([]v1.NodeAddress, error) {
 	return addresses, nil
 }
 
+// extractIPv6NodeAddresses maps the instance information from EC2 to an array of NodeAddresses
+// All IPv6 addresses are considered internal even if they are publicly routable. There are no instance DNS names associated with IPv6.
+func extractIPv6NodeAddresses(instance *ec2.Instance) ([]v1.NodeAddress, error) {
+	// Not clear if the order matters here, but we might as well indicate a sensible preference order
+
+	if instance == nil {
+		return nil, fmt.Errorf("nil instance passed to extractNodeAddresses")
+	}
+
+	addresses := []v1.NodeAddress{}
+
+	// handle internal network interfaces with IPv6 addresses
+	for _, networkInterface := range instance.NetworkInterfaces {
+		// skip network interfaces that are not currently in use
+		if aws.StringValue(networkInterface.Status) != ec2.NetworkInterfaceStatusInUse || len(networkInterface.Ipv6Addresses) == 0 {
+			continue
+		}
+
+		// return only the "first" address for each ENI
+		internalIPv6 := aws.StringValue(networkInterface.Ipv6Addresses[0].Ipv6Address)
+		ip := net.ParseIP(internalIPv6)
+		if ip == nil {
+			return nil, fmt.Errorf("EC2 instance had invalid IPv6 address: %s (%q)", aws.StringValue(instance.InstanceId), internalIPv6)
+		}
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: ip.String()})
+	}
+
+	return addresses, nil
+}
+
+// getNodeAddressesForFargateNode generates list of Node addresses for Fargate node.
+func getNodeAddressesForFargateNode(privateDNSName, privateIP string) []v1.NodeAddress {
+	addresses := []v1.NodeAddress{}
+	addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: privateIP})
+	if privateDNSName != "" {
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalDNS, Address: privateDNSName})
+	}
+	return addresses
+}
+
 // NodeAddressesByProviderID returns the node addresses of an instances with the specified unique providerID
 // This method will not be called from the node that is requesting this ID. i.e. metadata service
 // and other local methods cannot be used here
@@ -1615,12 +1810,39 @@ func (c *Cloud) NodeAddressesByProviderID(ctx context.Context, providerID string
 		return nil, err
 	}
 
+	if isFargateNode(string(instanceID)) {
+		eni, err := c.describeNetworkInterfaces(string(instanceID))
+		if eni == nil || err != nil {
+			return nil, err
+		}
+		return getNodeAddressesForFargateNode(aws.StringValue(eni.PrivateDnsName), aws.StringValue(eni.PrivateIpAddress)), nil
+	}
+
 	instance, err := describeInstance(c.ec2, instanceID)
 	if err != nil {
 		return nil, err
 	}
 
-	return extractNodeAddresses(instance)
+	var addresses []v1.NodeAddress
+
+	for _, family := range c.cfg.Global.NodeIPFamilies {
+		switch family {
+		case "ipv4":
+			ipv4addr, err := extractIPv4NodeAddresses(instance)
+			if err != nil {
+				return nil, err
+			}
+			addresses = append(addresses, ipv4addr...)
+		case "ipv6":
+			ipv6addr, err := extractIPv6NodeAddresses(instance)
+			if err != nil {
+				return nil, err
+			}
+			addresses = append(addresses, ipv6addr...)
+		}
+	}
+
+	return addresses, nil
 }
 
 // InstanceExistsByProviderID returns true if the instance with the given provider id still exists.
@@ -1629,6 +1851,11 @@ func (c *Cloud) InstanceExistsByProviderID(ctx context.Context, providerID strin
 	instanceID, err := KubernetesInstanceID(providerID).MapToAWSInstanceID()
 	if err != nil {
 		return false, err
+	}
+
+	if isFargateNode(string(instanceID)) {
+		eni, err := c.describeNetworkInterfaces(string(instanceID))
+		return eni != nil, err
 	}
 
 	request := &ec2.DescribeInstancesInput{
@@ -1664,6 +1891,11 @@ func (c *Cloud) InstanceShutdownByProviderID(ctx context.Context, providerID str
 	instanceID, err := KubernetesInstanceID(providerID).MapToAWSInstanceID()
 	if err != nil {
 		return false, err
+	}
+
+	if isFargateNode(string(instanceID)) {
+		eni, err := c.describeNetworkInterfaces(string(instanceID))
+		return eni != nil, err
 	}
 
 	request := &ec2.DescribeInstancesInput{
@@ -1720,6 +1952,10 @@ func (c *Cloud) InstanceTypeByProviderID(ctx context.Context, providerID string)
 	instanceID, err := KubernetesInstanceID(providerID).MapToAWSInstanceID()
 	if err != nil {
 		return "", err
+	}
+
+	if isFargateNode(string(instanceID)) {
+		return "", nil
 	}
 
 	instance, err := describeInstance(c.ec2, instanceID)
@@ -1826,6 +2062,18 @@ func (c *Cloud) GetZoneByProviderID(ctx context.Context, providerID string) (clo
 	if err != nil {
 		return cloudprovider.Zone{}, err
 	}
+
+	if isFargateNode(string(instanceID)) {
+		eni, err := c.describeNetworkInterfaces(string(instanceID))
+		if eni == nil || err != nil {
+			return cloudprovider.Zone{}, err
+		}
+		return cloudprovider.Zone{
+			FailureDomain: *eni.AvailabilityZone,
+			Region:        c.region,
+		}, nil
+	}
+
 	instance, err := c.getInstanceByID(string(instanceID))
 	if err != nil {
 		return cloudprovider.Zone{}, err
@@ -2545,7 +2793,7 @@ func (c *Cloud) CreateDisk(volumeOptions *VolumeOptions) (KubernetesVolumeID, er
 		createType = DefaultVolumeType
 
 	default:
-		return "", fmt.Errorf("invalid AWS VolumeType %q", volumeOptions.VolumeType)
+		return KubernetesVolumeID(""), fmt.Errorf("invalid AWS VolumeType %q", volumeOptions.VolumeType)
 	}
 
 	request := &ec2.CreateVolumeInput{}
@@ -2577,12 +2825,12 @@ func (c *Cloud) CreateDisk(volumeOptions *VolumeOptions) (KubernetesVolumeID, er
 
 	response, err := c.ec2.CreateVolume(request)
 	if err != nil {
-		return "", err
+		return KubernetesVolumeID(""), err
 	}
 
 	awsID := EBSVolumeID(aws.StringValue(response.VolumeId))
 	if awsID == "" {
-		return "", fmt.Errorf("VolumeID was not returned by CreateVolume")
+		return KubernetesVolumeID(""), fmt.Errorf("VolumeID was not returned by CreateVolume")
 	}
 	volumeName := KubernetesVolumeID("aws://" + aws.StringValue(response.AvailabilityZone) + "/" + string(awsID))
 
@@ -2595,8 +2843,22 @@ func (c *Cloud) CreateDisk(volumeOptions *VolumeOptions) (KubernetesVolumeID, er
 		// because Kubernetes may have limited permissions to the key.
 		if isAWSErrorVolumeNotFound(err) {
 			err = fmt.Errorf("failed to create encrypted volume: the volume disappeared after creation, most likely due to inaccessible KMS encryption key")
+		} else {
+			// When DescribeVolumes api failed, plugin will lose track on the volumes' state
+			// driver should be able to clean up these kind of volumes to make sure they are not leaked on customers' account
+			klog.V(5).Infof("Failed to create the volume %v due to %v. Will try to delete it.", volumeName, err)
+			awsDisk, newDiskError := newAWSDisk(c, volumeName)
+			if newDiskError != nil {
+				klog.Errorf("Failed to delete the volume %v due to error: %v", volumeName, newDiskError)
+			} else {
+				if _, deleteVolumeError := awsDisk.deleteVolume(); deleteVolumeError != nil {
+					klog.Errorf("Failed to delete the volume %v due to error: %v", volumeName, deleteVolumeError)
+				} else {
+					klog.V(5).Infof("%v is deleted because it is not in desired state after waiting", volumeName)
+				}
+			}
 		}
-		return "", err
+		return KubernetesVolumeID(""), err
 	}
 
 	return volumeName, nil
@@ -2739,12 +3001,12 @@ func (c *Cloud) GetVolumeLabels(volumeName KubernetesVolumeID) (map[string]strin
 		return nil, fmt.Errorf("volume did not have AZ information: %q", aws.StringValue(info.VolumeId))
 	}
 
-	labels[v1.LabelFailureDomainBetaZone] = az
+	labels[v1.LabelTopologyZone] = az
 	region, err := azToRegion(az)
 	if err != nil {
 		return nil, err
 	}
-	labels[v1.LabelFailureDomainBetaRegion] = region
+	labels[v1.LabelTopologyRegion] = region
 
 	return labels, nil
 }
@@ -3368,7 +3630,7 @@ func findTag(tags []*ec2.Tag, key string) (string, bool) {
 	return "", false
 }
 
-// Finds the subnets associated with the cluster, by matching tags.
+// Finds the subnets associated with the cluster, by matching cluster tags if present.
 // For maximal backwards compatibility, if no subnets are tagged, it will fall-back to the current subnet.
 // However, in future this will likely be treated as an error.
 func (c *Cloud) findSubnets() ([]*ec2.Subnet, error) {
@@ -3383,6 +3645,8 @@ func (c *Cloud) findSubnets() ([]*ec2.Subnet, error) {
 	var matches []*ec2.Subnet
 	for _, subnet := range subnets {
 		if c.tagging.hasClusterTag(subnet.Tags) {
+			matches = append(matches, subnet)
+		} else if c.tagging.hasNoClusterPrefixTag(subnet.Tags) {
 			matches = append(matches, subnet)
 		}
 	}
@@ -3447,7 +3711,7 @@ func (c *Cloud) findELBSubnets(internalELB bool) ([]string, error) {
 			continue
 		}
 
-		// Try to break the tie using a tag
+		// Try to break the tie using the role tag
 		var tagName string
 		if internalELB {
 			tagName = TagNameSubnetInternalELB
@@ -3465,8 +3729,17 @@ func (c *Cloud) findELBSubnets(internalELB bool) ([]string, error) {
 			continue
 		}
 
+		// Prefer the one with the cluster Tag
+		existingHasClusterTag := c.tagging.hasClusterTag(existing.Tags)
+		subnetHasClusterTag := c.tagging.hasClusterTag(subnet.Tags)
+		if existingHasClusterTag != subnetHasClusterTag {
+			if subnetHasClusterTag {
+				subnetsByAZ[az] = subnet
+			}
+			continue
+		}
+
 		// If we have two subnets for the same AZ we arbitrarily choose the one that is first lexicographically.
-		// TODO: Should this be an error.
 		if strings.Compare(*existing.SubnetId, *subnet.SubnetId) > 0 {
 			klog.Warningf("Found multiple subnets in AZ %q; choosing %q between subnets %q and %q", az, *subnet.SubnetId, *existing.SubnetId, *subnet.SubnetId)
 			subnetsByAZ[az] = subnet
@@ -3490,6 +3763,90 @@ func (c *Cloud) findELBSubnets(internalELB bool) ([]string, error) {
 	}
 
 	return subnetIDs, nil
+}
+
+func splitCommaSeparatedString(commaSeparatedString string) []string {
+	var result []string
+	parts := strings.Split(commaSeparatedString, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if len(part) == 0 {
+			continue
+		}
+		result = append(result, part)
+	}
+	return result
+}
+
+// parses comma separated values from annotation into string slice, returns true if annotation exists
+func parseStringSliceAnnotation(annotations map[string]string, annotation string, value *[]string) bool {
+	rawValue := ""
+	if exists := parseStringAnnotation(annotations, annotation, &rawValue); !exists {
+		return false
+	}
+	*value = splitCommaSeparatedString(rawValue)
+	return true
+}
+
+func (c *Cloud) getLoadBalancerSubnets(service *v1.Service, internalELB bool) ([]string, error) {
+	var rawSubnetNameOrIDs []string
+	if exists := parseStringSliceAnnotation(service.Annotations, ServiceAnnotationLoadBalancerSubnets, &rawSubnetNameOrIDs); exists {
+		return c.resolveSubnetNameOrIDs(rawSubnetNameOrIDs)
+	}
+	return c.findELBSubnets(internalELB)
+}
+
+func (c *Cloud) resolveSubnetNameOrIDs(subnetNameOrIDs []string) ([]string, error) {
+	var subnetIDs []string
+	var subnetNames []string
+	if len(subnetNameOrIDs) == 0 {
+		return []string{}, fmt.Errorf("unable to resolve empty subnet slice")
+	}
+	for _, nameOrID := range subnetNameOrIDs {
+		if strings.HasPrefix(nameOrID, "subnet-") {
+			subnetIDs = append(subnetIDs, nameOrID)
+		} else {
+			subnetNames = append(subnetNames, nameOrID)
+		}
+	}
+	var resolvedSubnets []*ec2.Subnet
+	if len(subnetIDs) > 0 {
+		req := &ec2.DescribeSubnetsInput{
+			SubnetIds: aws.StringSlice(subnetIDs),
+		}
+		subnets, err := c.ec2.DescribeSubnets(req)
+		if err != nil {
+			return []string{}, err
+		}
+		resolvedSubnets = append(resolvedSubnets, subnets...)
+	}
+	if len(subnetNames) > 0 {
+		req := &ec2.DescribeSubnetsInput{
+			Filters: []*ec2.Filter{
+				{
+					Name:   aws.String("tag:Name"),
+					Values: aws.StringSlice(subnetNames),
+				},
+				{
+					Name:   aws.String("vpc-id"),
+					Values: aws.StringSlice([]string{c.vpcID}),
+				},
+			},
+		}
+		subnets, err := c.ec2.DescribeSubnets(req)
+		if err != nil {
+			return []string{}, err
+		}
+		resolvedSubnets = append(resolvedSubnets, subnets...)
+	}
+	if len(resolvedSubnets) != len(subnetNameOrIDs) {
+		return []string{}, fmt.Errorf("expected to find %v, but found %v subnets", len(subnetNameOrIDs), len(resolvedSubnets))
+	}
+	var subnets []string
+	for _, subnet := range resolvedSubnets {
+		subnets = append(subnets, aws.StringValue(subnet.SubnetId))
+	}
+	return subnets, nil
 }
 
 func isSubnetPublic(rt []*ec2.RouteTable, subnetID string) (bool, error) {
@@ -3869,7 +4226,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 
 	if isNLB(annotations) {
 		// Find the subnets that the ELB will live in
-		subnetIDs, err := c.findELBSubnets(internalELB)
+		subnetIDs, err := c.getLoadBalancerSubnets(apiService, internalELB)
 		if err != nil {
 			klog.Errorf("Error listing subnets in VPC: %q", err)
 			return nil, err
@@ -4036,7 +4393,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 	}
 
 	// Find the subnets that the ELB will live in
-	subnetIDs, err := c.findELBSubnets(internalELB)
+	subnetIDs, err := c.getLoadBalancerSubnets(apiService, internalELB)
 	if err != nil {
 		klog.Errorf("Error listing subnets in VPC: %q", err)
 		return nil, err
@@ -4862,6 +5219,11 @@ func (c *Cloud) getFullInstance(nodeName types.NodeName) (*awsInstance, *ec2.Ins
 	return awsInstance, instance, err
 }
 
+// isFargateNode returns true if given node runs on Fargate compute
+func isFargateNode(nodeName string) bool {
+	return strings.HasPrefix(nodeName, fargateNodeNamePrefix)
+}
+
 func (c *Cloud) nodeNameToProviderID(nodeName types.NodeName) (InstanceID, error) {
 	if len(nodeName) == 0 {
 		return "", fmt.Errorf("no nodeName provided")
@@ -4914,4 +5276,38 @@ func getInitialAttachDetachDelay(status string) time.Duration {
 		return volumeDetachmentStatusInitialDelay
 	}
 	return volumeAttachmentStatusInitialDelay
+}
+
+// describeNetworkInterfaces returns network interface information for the given DNS name.
+func (c *Cloud) describeNetworkInterfaces(nodeName string) (*ec2.NetworkInterface, error) {
+	eniEndpoint := strings.TrimPrefix(nodeName, fargateNodeNamePrefix)
+
+	filters := []*ec2.Filter{
+		newEc2Filter("attachment.status", "attached"),
+		newEc2Filter("vpc-id", c.vpcID),
+	}
+
+	// when enableDnsSupport is set to false in a VPC, interface will not have private DNS names.
+	if strings.HasPrefix(eniEndpoint, privateDNSNamePrefix) {
+		filters = append(filters, newEc2Filter("private-dns-name", eniEndpoint))
+	} else {
+		filters = append(filters, newEc2Filter("private-ip-address", eniEndpoint))
+	}
+
+	request := &ec2.DescribeNetworkInterfacesInput{
+		Filters: filters,
+	}
+
+	eni, err := c.ec2.DescribeNetworkInterfaces(request)
+	if err != nil {
+		return nil, err
+	}
+	if len(eni.NetworkInterfaces) == 0 {
+		return nil, nil
+	}
+	if len(eni.NetworkInterfaces) != 1 {
+		// This should not be possible - ids should be unique
+		return nil, fmt.Errorf("multiple interfaces found with same id %q", eni.NetworkInterfaces)
+	}
+	return eni.NetworkInterfaces[0], nil
 }

@@ -1,5 +1,3 @@
-// +build !providerless
-
 /*
 Copyright 2014 The Kubernetes Authors.
 
@@ -20,6 +18,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -70,6 +69,11 @@ func (m *MockedFakeEC2) expectDescribeSecurityGroups(clusterID, groupName string
 func (m *MockedFakeEC2) DescribeVolumes(request *ec2.DescribeVolumesInput) ([]*ec2.Volume, error) {
 	args := m.Called(request)
 	return args.Get(0).([]*ec2.Volume), nil
+}
+
+func (m *MockedFakeEC2) DeleteVolume(request *ec2.DeleteVolumeInput) (*ec2.DeleteVolumeOutput, error) {
+	args := m.Called(request)
+	return args.Get(0).(*ec2.DeleteVolumeOutput), nil
 }
 
 func (m *MockedFakeEC2) DescribeSecurityGroups(request *ec2.DescribeSecurityGroupsInput) ([]*ec2.SecurityGroup, error) {
@@ -208,6 +212,48 @@ func TestReadAWSCloudConfig(t *testing.T) {
 			if cfg.Global.Zone != test.zone {
 				t.Errorf("Incorrect zone value (%s vs %s) for case: %s",
 					cfg.Global.Zone, test.zone, test.name)
+			}
+		}
+	}
+}
+
+func TestReadAWSCloudConfigNodeIPFamilies(t *testing.T) {
+	tests := []struct {
+		name string
+
+		reader io.Reader
+		aws    Services
+
+		expectError    bool
+		nodeIPFamilies []string
+	}{
+		{
+			"Single IP family",
+			strings.NewReader("[global]\nNodeIPFamilies = ipv6"), nil,
+			false, []string{"ipv6"},
+		},
+		{
+			"Multiple IP families",
+			strings.NewReader("[global]\nNodeIPFamilies = ipv6\nNodeIPFamilies = ipv4"), nil,
+			false, []string{"ipv6", "ipv4"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Logf("Running test case %s", test.name)
+		cfg, err := readAWSCloudConfig(test.reader)
+
+		if test.expectError {
+			if err == nil {
+				t.Errorf("Should error for case %s (cfg=%v)", test.name, cfg)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("Should succeed for case: %s", test.name)
+			}
+			if !reflect.DeepEqual(cfg.Global.NodeIPFamilies, test.nodeIPFamilies) {
+				t.Errorf("Incorrect ip family value (%s vs %v) for case: %s",
+					cfg.Global.NodeIPFamilies, test.nodeIPFamilies, test.name)
 			}
 		}
 	}
@@ -583,7 +629,7 @@ func testHasNodeAddress(t *testing.T, addrs []v1.NodeAddress, addressType v1.Nod
 	t.Errorf("Did not find expected address: %s:%s in %v", addressType, address, addrs)
 }
 
-func makeInstance(num int, privateIP, publicIP, privateDNSName, publicDNSName string, setNetInterface bool) ec2.Instance {
+func makeInstance(num int, privateIP, publicIP, privateDNSName, publicDNSName string, ipv6s []string, setNetInterface bool) ec2.Instance {
 	var tag ec2.Tag
 	tag.Key = aws.String(TagNameKubernetesClusterLegacy)
 	tag.Value = aws.String(TestClusterID)
@@ -613,17 +659,87 @@ func makeInstance(num int, privateIP, publicIP, privateDNSName, publicDNSName st
 				},
 			},
 		}
+		if len(ipv6s) > 0 {
+			instance.NetworkInterfaces[0].Ipv6Addresses = []*ec2.InstanceIpv6Address{
+				{
+					Ipv6Address: aws.String(ipv6s[0]),
+				},
+			}
+		}
 	}
 	return instance
+}
+
+func TestNodeAddressesByProviderID(t *testing.T) {
+	// Note instance0 and instance1 have the same name
+	// (we test that this produces an error)
+	instance0 := makeInstance(0, "192.168.0.1", "1.2.3.4", "instance-same.ec2.internal", "instance-same.ec2.external", nil, true)
+	instance1 := makeInstance(1, "192.168.0.2", "", "instance-same.ec2.internal", "", nil, false)
+	instance2 := makeInstance(2, "192.168.0.1", "1.2.3.4", "instance-other.ec2.internal", "", nil, false)
+	instance3 := makeInstance(3, "192.168.0.3", "", "instance-ipv6.ec2.internal", "", []string{"2a05:d014:aa7:911:fc7e:1600:fc4d:ab2", "2a05:d014:aa7:911:9f44:e737:1aa0:6489"}, true)
+	instances := []*ec2.Instance{&instance0, &instance1, &instance2, &instance3}
+
+	aws1, _ := mockInstancesResp(&instance0, []*ec2.Instance{&instance0})
+	_, err1 := aws1.NodeAddressesByProviderID(context.TODO(), "i-xxx")
+	if err1 == nil {
+		t.Errorf("Should error when no instance found")
+	}
+
+	aws2, _ := mockInstancesResp(&instance0, instances[0:1])
+	// change node name so it uses the instance instead of metadata
+	aws2.selfAWSInstance.nodeName = "foo"
+	addrs2, err2 := aws2.NodeAddressesByProviderID(context.TODO(), "i-0")
+	if err2 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs2) != 5 {
+		t.Errorf("Should return exactly 5 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs2, v1.NodeInternalIP, "192.168.0.1")
+	testHasNodeAddress(t, addrs2, v1.NodeExternalIP, "1.2.3.4")
+	testHasNodeAddress(t, addrs2, v1.NodeExternalDNS, "instance-same.ec2.external")
+	testHasNodeAddress(t, addrs2, v1.NodeInternalDNS, "instance-same.ec2.internal")
+	testHasNodeAddress(t, addrs2, v1.NodeHostName, "instance-same.ec2.internal")
+
+	aws3, _ := mockInstancesResp(&instance3, instances)
+	aws3.cfg.Global.NodeIPFamilies = []string{"ipv4", "ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws3.selfAWSInstance.nodeName = "foo"
+	addrs3, err3 := aws3.NodeAddressesByProviderID(context.TODO(), "i-3")
+	if err3 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs3) != 4 {
+		t.Errorf("Should return exactly 4 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs3, v1.NodeInternalIP, "192.168.0.3")
+	testHasNodeAddress(t, addrs3, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+	testHasNodeAddress(t, addrs3, v1.NodeInternalDNS, "instance-ipv6.ec2.internal")
+	testHasNodeAddress(t, addrs3, v1.NodeHostName, "instance-ipv6.ec2.internal")
+
+	aws4, _ := mockInstancesResp(&instance3, instances)
+	aws4.cfg.Global.NodeIPFamilies = []string{"ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws4.selfAWSInstance.nodeName = "foo"
+	addrs4, err4 := aws4.NodeAddressesByProviderID(context.TODO(), "i-3")
+	if err4 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs4) != 1 {
+		t.Errorf("Should return exactly 1 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs4, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+
 }
 
 func TestNodeAddresses(t *testing.T) {
 	// Note instance0 and instance1 have the same name
 	// (we test that this produces an error)
-	instance0 := makeInstance(0, "192.168.0.1", "1.2.3.4", "instance-same.ec2.internal", "instance-same.ec2.external", true)
-	instance1 := makeInstance(1, "192.168.0.2", "", "instance-same.ec2.internal", "", false)
-	instance2 := makeInstance(2, "192.168.0.1", "1.2.3.4", "instance-other.ec2.internal", "", false)
-	instances := []*ec2.Instance{&instance0, &instance1, &instance2}
+	instance0 := makeInstance(0, "192.168.0.1", "1.2.3.4", "instance-same.ec2.internal", "instance-same.ec2.external", nil, true)
+	instance1 := makeInstance(1, "192.168.0.2", "", "instance-same.ec2.internal", "", nil, false)
+	instance2 := makeInstance(2, "192.168.0.1", "1.2.3.4", "instance-other.ec2.internal", "", nil, false)
+	instance3 := makeInstance(3, "192.168.0.3", "", "instance-ipv6.ec2.internal", "", []string{"2a05:d014:aa7:911:fc7e:1600:fc4d:ab2", "2a05:d014:aa7:911:9f44:e737:1aa0:6489"}, true)
+	instances := []*ec2.Instance{&instance0, &instance1, &instance2, &instance3}
 
 	aws1, _ := mockInstancesResp(&instance0, []*ec2.Instance{&instance0})
 	_, err1 := aws1.NodeAddresses(context.TODO(), "instance-mismatch.ec2.internal")
@@ -652,10 +768,40 @@ func TestNodeAddresses(t *testing.T) {
 	testHasNodeAddress(t, addrs3, v1.NodeExternalDNS, "instance-same.ec2.external")
 	testHasNodeAddress(t, addrs3, v1.NodeInternalDNS, "instance-same.ec2.internal")
 	testHasNodeAddress(t, addrs3, v1.NodeHostName, "instance-same.ec2.internal")
+
+	aws4, _ := mockInstancesResp(&instance3, instances)
+	aws4.cfg.Global.NodeIPFamilies = []string{"ipv4", "ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws4.selfAWSInstance.nodeName = "foo"
+	addrs4, err4 := aws4.NodeAddresses(context.TODO(), "instance-ipv6.ec2.internal")
+	if err4 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs4) != 4 {
+		t.Errorf("Should return exactly 4 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs4, v1.NodeInternalIP, "192.168.0.3")
+	testHasNodeAddress(t, addrs4, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+	testHasNodeAddress(t, addrs4, v1.NodeInternalDNS, "instance-ipv6.ec2.internal")
+	testHasNodeAddress(t, addrs4, v1.NodeHostName, "instance-ipv6.ec2.internal")
+
+	aws5, _ := mockInstancesResp(&instance3, instances)
+	aws5.cfg.Global.NodeIPFamilies = []string{"ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws5.selfAWSInstance.nodeName = "foo"
+	addrs5, err5 := aws5.NodeAddresses(context.TODO(), "instance-ipv6.ec2.internal")
+	if err5 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs5) != 1 {
+		t.Errorf("Should return exactly 1 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs5, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+
 }
 
 func TestNodeAddressesWithMetadata(t *testing.T) {
-	instance := makeInstance(0, "", "2.3.4.5", "instance.ec2.internal", "", false)
+	instance := makeInstance(0, "", "2.3.4.5", "instance.ec2.internal", "", nil, false)
 	instances := []*ec2.Instance{&instance}
 	awsCloud, awsServices := mockInstancesResp(&instance, instances)
 
@@ -668,6 +814,9 @@ func TestNodeAddressesWithMetadata(t *testing.T) {
 	testHasNodeAddress(t, addrs, v1.NodeInternalIP, "192.168.0.1")
 	testHasNodeAddress(t, addrs, v1.NodeInternalIP, "192.168.0.2")
 	testHasNodeAddress(t, addrs, v1.NodeExternalIP, "2.3.4.5")
+	if len(addrs) != 5 {
+		t.Errorf("should return exactly 5 addresses, got %v", addrs)
+	}
 	var index1, index2 int
 	for i, addr := range addrs {
 		if addr.Type == v1.NodeInternalIP && addr.Address == "192.168.0.1" {
@@ -805,6 +954,356 @@ func constructRouteTable(subnetID string, public bool) *ec2.RouteTable {
 			DestinationCidrBlock: aws.String("0.0.0.0/0"),
 			GatewayId:            aws.String(gatewayID),
 		}},
+	}
+}
+
+func Test_findELBSubnets(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, err := newAWSCloud(CloudConfig{}, awsServices)
+	if err != nil {
+		t.Errorf("Error building aws cloud: %v", err)
+		return
+	}
+	subnetA0000001 := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2a"),
+		SubnetId:         aws.String("subnet-a0000001"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(TagNameSubnetPublicELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetA0000002 := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2a"),
+		SubnetId:         aws.String("subnet-a0000002"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(TagNameSubnetPublicELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetA0000003 := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2a"),
+		SubnetId:         aws.String("subnet-a0000003"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(c.tagging.clusterTagKey()),
+				Value: aws.String("owned"),
+			},
+			{
+				Key:   aws.String(TagNameSubnetInternalELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetB0000001 := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2b"),
+		SubnetId:         aws.String("subnet-b0000001"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(c.tagging.clusterTagKey()),
+				Value: aws.String("owned"),
+			},
+			{
+				Key:   aws.String(TagNameSubnetPublicELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetB0000002 := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2b"),
+		SubnetId:         aws.String("subnet-b0000002"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(c.tagging.clusterTagKey()),
+				Value: aws.String("owned"),
+			},
+			{
+				Key:   aws.String(TagNameSubnetInternalELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetC0000001 := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2c"),
+		SubnetId:         aws.String("subnet-c0000001"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(c.tagging.clusterTagKey()),
+				Value: aws.String("owned"),
+			},
+			{
+				Key:   aws.String(TagNameSubnetInternalELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetOther := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2c"),
+		SubnetId:         aws.String("subnet-other"),
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(TagNameKubernetesClusterPrefix + "clusterid.other"),
+				Value: aws.String("owned"),
+			},
+			{
+				Key:   aws.String(TagNameSubnetInternalELB),
+				Value: aws.String("1"),
+			},
+		},
+	}
+	subnetNoTag := &ec2.Subnet{
+		AvailabilityZone: aws.String("us-west-2c"),
+		SubnetId:         aws.String("subnet-notag"),
+	}
+
+	tests := []struct {
+		name        string
+		subnets     []*ec2.Subnet
+		routeTables map[string]bool
+		internal    bool
+		want        []string
+	}{
+		{
+			name: "no subnets",
+		},
+		{
+			name: "single tagged subnet",
+			subnets: []*ec2.Subnet{
+				subnetA0000001,
+			},
+			routeTables: map[string]bool{
+				"subnet-a0000001": true,
+			},
+			internal: false,
+			want:     []string{"subnet-a0000001"},
+		},
+		{
+			name: "no matching public subnet",
+			subnets: []*ec2.Subnet{
+				subnetA0000002,
+			},
+			routeTables: map[string]bool{
+				"subnet-a0000002": false,
+			},
+			want: nil,
+		},
+		{
+			name: "prefer role over cluster tag",
+			subnets: []*ec2.Subnet{
+				subnetA0000001,
+				subnetA0000003,
+			},
+			routeTables: map[string]bool{
+				"subnet-a0000001": true,
+				"subnet-a0000003": true,
+			},
+			want: []string{"subnet-a0000001"},
+		},
+		{
+			name: "prefer cluster tag",
+			subnets: []*ec2.Subnet{
+				subnetC0000001,
+				subnetNoTag,
+			},
+			want: []string{"subnet-c0000001"},
+		},
+		{
+			name: "include untagged",
+			subnets: []*ec2.Subnet{
+				subnetA0000001,
+				subnetNoTag,
+			},
+			routeTables: map[string]bool{
+				"subnet-a0000001": true,
+				"subnet-notag":    true,
+			},
+			want: []string{"subnet-a0000001", "subnet-notag"},
+		},
+		{
+			name: "ignore some other cluster owned subnet",
+			subnets: []*ec2.Subnet{
+				subnetB0000001,
+				subnetOther,
+			},
+			routeTables: map[string]bool{
+				"subnet-b0000001": true,
+				"subnet-other":    true,
+			},
+			want: []string{"subnet-b0000001"},
+		},
+		{
+			name: "prefer matching role",
+			subnets: []*ec2.Subnet{
+				subnetB0000001,
+				subnetB0000002,
+			},
+			routeTables: map[string]bool{
+				"subnet-b0000001": false,
+				"subnet-b0000002": false,
+			},
+			want:     []string{"subnet-b0000002"},
+			internal: true,
+		},
+		{
+			name: "choose lexicographic order",
+			subnets: []*ec2.Subnet{
+				subnetA0000001,
+				subnetA0000002,
+			},
+			routeTables: map[string]bool{
+				"subnet-a0000001": true,
+				"subnet-a0000002": true,
+			},
+			want: []string{"subnet-a0000001"},
+		},
+		{
+			name: "everything",
+			subnets: []*ec2.Subnet{
+				subnetA0000001,
+				subnetA0000002,
+				subnetB0000001,
+				subnetB0000002,
+				subnetC0000001,
+				subnetNoTag,
+				subnetOther,
+			},
+			routeTables: map[string]bool{
+				"subnet-a0000001": true,
+				"subnet-a0000002": true,
+				"subnet-b0000001": true,
+				"subnet-b0000002": true,
+				"subnet-c0000001": true,
+				"subnet-notag":    true,
+				"subnet-other":    true,
+			},
+			want: []string{"subnet-a0000001", "subnet-b0000001", "subnet-c0000001"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			awsServices.ec2.RemoveSubnets()
+			awsServices.ec2.RemoveRouteTables()
+			for _, subnet := range tt.subnets {
+				awsServices.ec2.CreateSubnet(subnet)
+			}
+			routeTables := constructRouteTables(tt.routeTables)
+			for _, rt := range routeTables {
+				awsServices.ec2.CreateRouteTable(rt)
+			}
+			got, _ := c.findELBSubnets(tt.internal)
+			sort.Strings(tt.want)
+			sort.Strings(got)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_getLoadBalancerSubnets(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, err := newAWSCloud(CloudConfig{}, awsServices)
+	if err != nil {
+		t.Errorf("Error building aws cloud: %v", err)
+		return
+	}
+	tests := []struct {
+		name        string
+		service     *v1.Service
+		subnets     []*ec2.Subnet
+		internalELB bool
+		want        []string
+		wantErr     error
+	}{
+		{
+			name:    "no annotation",
+			service: &v1.Service{},
+		},
+		{
+			name: "annotation with no subnets",
+			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"service.beta.kubernetes.io/aws-load-balancer-subnets": "\t",
+					},
+				},
+			},
+			wantErr: errors.New("unable to resolve empty subnet slice"),
+		},
+		{
+			name: "subnet ids",
+			subnets: []*ec2.Subnet{
+				{
+					AvailabilityZone: aws.String("us-west-2c"),
+					SubnetId:         aws.String("subnet-a000001"),
+				},
+				{
+					AvailabilityZone: aws.String("us-west-2b"),
+					SubnetId:         aws.String("subnet-a000002"),
+				},
+			},
+			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"service.beta.kubernetes.io/aws-load-balancer-subnets": "subnet-a000001, subnet-a000002",
+					},
+				},
+			},
+			want: []string{"subnet-a000001", "subnet-a000002"},
+		},
+		{
+			name: "subnet names",
+			subnets: []*ec2.Subnet{
+				{
+					AvailabilityZone: aws.String("us-west-2c"),
+					SubnetId:         aws.String("subnet-a000001"),
+				},
+				{
+					AvailabilityZone: aws.String("us-west-2b"),
+					SubnetId:         aws.String("subnet-a000002"),
+				},
+			},
+			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"service.beta.kubernetes.io/aws-load-balancer-subnets": "My Subnet 1, My Subnet 2 ",
+					},
+				},
+			},
+			want: []string{"subnet-a000001", "subnet-a000002"},
+		},
+		{
+			name: "unable to find all subnets",
+			subnets: []*ec2.Subnet{
+				{
+					AvailabilityZone: aws.String("us-west-2c"),
+					SubnetId:         aws.String("subnet-a000001"),
+				},
+			},
+			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"service.beta.kubernetes.io/aws-load-balancer-subnets": "My Subnet 1, My Subnet 2, Test Subnet ",
+					},
+				},
+			},
+			wantErr: errors.New("expected to find 3, but found 1 subnets"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			awsServices.ec2.RemoveSubnets()
+			for _, subnet := range tt.subnets {
+				awsServices.ec2.CreateSubnet(subnet)
+			}
+			got, err := c.getLoadBalancerSubnets(tt.service, tt.internalELB)
+			if tt.wantErr != nil {
+				assert.EqualError(t, err, tt.wantErr.Error())
+			} else {
+				assert.Equal(t, tt.want, got)
+			}
+		})
 	}
 }
 
@@ -1225,8 +1724,8 @@ func TestGetVolumeLabels(t *testing.T) {
 
 	assert.Nil(t, err, "Error creating Volume %v", err)
 	assert.Equal(t, map[string]string{
-		v1.LabelFailureDomainBetaZone:   "us-east-1a",
-		v1.LabelFailureDomainBetaRegion: "us-east-1"}, labels)
+		v1.LabelTopologyZone:   "us-east-1a",
+		v1.LabelTopologyRegion: "us-east-1"}, labels)
 	awsServices.ec2.(*MockedFakeEC2).AssertExpectations(t)
 }
 
@@ -1299,8 +1798,8 @@ func TestGetLabelsForVolume(t *testing.T) {
 				AvailabilityZone: aws.String("us-east-1a"),
 			}},
 			map[string]string{
-				v1.LabelFailureDomainBetaZone:   "us-east-1a",
-				v1.LabelFailureDomainBetaRegion: "us-east-1",
+				v1.LabelTopologyZone:   "us-east-1a",
+				v1.LabelTopologyRegion: "us-east-1",
 			},
 			nil,
 		},
@@ -2009,6 +2508,51 @@ func TestCreateDisk(t *testing.T) {
 	volumeID, err := c.CreateDisk(volumeOptions)
 	assert.Nil(t, err, "Error creating disk: %v", err)
 	assert.Equal(t, volumeID, KubernetesVolumeID("aws://us-east-1a/vol-volumeId0"))
+	awsServices.ec2.(*MockedFakeEC2).AssertExpectations(t)
+}
+
+func TestCreateDiskFailDescribeVolume(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	volumeOptions := &VolumeOptions{
+		AvailabilityZone: "us-east-1a",
+		CapacityGB:       10,
+	}
+	request := &ec2.CreateVolumeInput{
+		AvailabilityZone: aws.String("us-east-1a"),
+		Encrypted:        aws.Bool(false),
+		VolumeType:       aws.String(DefaultVolumeType),
+		Size:             aws.Int64(10),
+		TagSpecifications: []*ec2.TagSpecification{
+			{ResourceType: aws.String(ec2.ResourceTypeVolume), Tags: []*ec2.Tag{
+				// CreateVolume from MockedFakeEC2 expects sorted tags, so we need to
+				// always have these tags sorted:
+				{Key: aws.String(TagNameKubernetesClusterLegacy), Value: aws.String(TestClusterID)},
+				{Key: aws.String(fmt.Sprintf("%s%s", TagNameKubernetesClusterPrefix, TestClusterID)), Value: aws.String(ResourceLifecycleOwned)},
+			}},
+		},
+	}
+
+	volume := &ec2.Volume{
+		AvailabilityZone: aws.String("us-east-1a"),
+		VolumeId:         aws.String("vol-volumeId0"),
+		State:            aws.String("creating"),
+	}
+	awsServices.ec2.(*MockedFakeEC2).On("CreateVolume", request).Return(volume, nil)
+
+	describeVolumesRequest := &ec2.DescribeVolumesInput{
+		VolumeIds: []*string{aws.String("vol-volumeId0")},
+	}
+	deleteVolumeRequest := &ec2.DeleteVolumeInput{
+		VolumeId: aws.String("vol-volumeId0"),
+	}
+	awsServices.ec2.(*MockedFakeEC2).On("DescribeVolumes", describeVolumesRequest).Return([]*ec2.Volume{volume}, nil)
+	awsServices.ec2.(*MockedFakeEC2).On("DeleteVolume", deleteVolumeRequest).Return(&ec2.DeleteVolumeOutput{}, nil)
+
+	volumeID, err := c.CreateDisk(volumeOptions)
+	assert.Error(t, err)
+	assert.Equal(t, volumeID, KubernetesVolumeID(""))
 	awsServices.ec2.(*MockedFakeEC2).AssertExpectations(t)
 }
 
@@ -3063,4 +3607,137 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_parseStringSliceAnnotation(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotation  string
+		annotations map[string]string
+		want        []string
+		wantExist   bool
+	}{
+		{
+			name:       "empty annotation",
+			annotation: "test.annotation",
+			wantExist:  false,
+		},
+		{
+			name:       "empty value",
+			annotation: "a1",
+			annotations: map[string]string{
+				"a1": "\t, ,,",
+			},
+			want:      nil,
+			wantExist: true,
+		},
+		{
+			name:       "single value",
+			annotation: "a1",
+			annotations: map[string]string{
+				"a1": "   value 1 ",
+			},
+			want:      []string{"value 1"},
+			wantExist: true,
+		},
+		{
+			name:       "multiple values",
+			annotation: "a1",
+			annotations: map[string]string{
+				"a1": "subnet-1, subnet-2, My Subnet ",
+			},
+			want:      []string{"subnet-1", "subnet-2", "My Subnet"},
+			wantExist: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotValue []string
+			gotExist := parseStringSliceAnnotation(tt.annotations, tt.annotation, &gotValue)
+			assert.Equal(t, tt.wantExist, gotExist)
+			assert.Equal(t, tt.want, gotValue)
+		})
+	}
+}
+
+func TestNodeAddressesForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	nodeAddresses, _ := c.NodeAddressesByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-ip-192.168.164.88")
+	verifyNodeAddressesForFargate(t, true, nodeAddresses)
+}
+
+func TestNodeAddressesForFargatePrivateIP(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	nodeAddresses, _ := c.NodeAddressesByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-192.168.164.88")
+	verifyNodeAddressesForFargate(t, false, nodeAddresses)
+}
+
+func verifyNodeAddressesForFargate(t *testing.T, verifyPublicIP bool, nodeAddresses []v1.NodeAddress) {
+	if verifyPublicIP {
+		assert.Equal(t, 2, len(nodeAddresses))
+		assert.Equal(t, "ip-1-2-3-4.compute.amazon.com", nodeAddresses[1].Address)
+		assert.Equal(t, v1.NodeInternalDNS, nodeAddresses[1].Type)
+	} else {
+		assert.Equal(t, 1, len(nodeAddresses))
+	}
+	assert.Equal(t, "1.2.3.4", nodeAddresses[0].Address)
+	assert.Equal(t, v1.NodeInternalIP, nodeAddresses[0].Type)
+}
+
+func TestInstanceExistsByProviderIDForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	instanceExist, err := c.InstanceExistsByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-192.168.164.88")
+	assert.Nil(t, err)
+	assert.True(t, instanceExist)
+}
+
+func TestInstanceNotExistsByProviderIDForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	instanceExist, err := c.InstanceExistsByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-not-found")
+	assert.Nil(t, err)
+	assert.False(t, instanceExist)
+}
+
+func TestInstanceShutdownByProviderIDForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	instanceExist, err := c.InstanceShutdownByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-192.168.164.88")
+	assert.Nil(t, err)
+	assert.True(t, instanceExist)
+}
+
+func TestInstanceShutdownNotExistsByProviderIDForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	instanceExist, err := c.InstanceShutdownByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-not-found")
+	assert.Nil(t, err)
+	assert.False(t, instanceExist)
+}
+
+func TestInstanceTypeByProviderIDForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	instanceType, err := c.InstanceTypeByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-not-found")
+	assert.Nil(t, err)
+	assert.Equal(t, "", instanceType)
+}
+
+func TestGetZoneByProviderIDForFargate(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(CloudConfig{}, awsServices)
+
+	zoneDetails, err := c.GetZoneByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-192.168.164.88")
+	assert.Nil(t, err)
+	assert.Equal(t, "us-west-2c", zoneDetails.FailureDomain)
 }

@@ -1,5 +1,3 @@
-// +build !providerless
-
 /*
 Copyright 2017 The Kubernetes Authors.
 
@@ -150,6 +148,15 @@ func (t *awsTagging) hasClusterTag(tags []*ec2.Tag) bool {
 		}
 	}
 	return false
+}
+
+func (t *awsTagging) hasNoClusterPrefixTag(tags []*ec2.Tag) bool {
+	for _, tag := range tags {
+		if strings.HasPrefix(aws.StringValue(tag.Key), TagNameKubernetesClusterPrefix) {
+			return false
+		}
+	}
+	return true
 }
 
 // Ensure that a resource has the correct tags

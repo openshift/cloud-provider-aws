@@ -1,5 +1,3 @@
-// +build !providerless
-
 /*
 Copyright 2016 The Kubernetes Authors.
 
@@ -70,7 +68,7 @@ func (s IPPermissionSet) Ungroup() IPPermissionSet {
 			c := &ec2.IpPermission{}
 			*c = *p
 			c.UserIdGroupPairs = []*ec2.UserIdGroupPair{u}
-			l2 = append(l, c)
+			l2 = append(l2, c)
 		}
 	}
 
