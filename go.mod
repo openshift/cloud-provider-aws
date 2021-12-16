@@ -8,17 +8,16 @@ require (
 	github.com/google/go-cmp v0.5.5
 	github.com/stretchr/testify v1.7.0
 	gopkg.in/gcfg.v1 v1.2.0
-	gopkg.in/warnings.v0 v0.1.1 // indirect
-	k8s.io/api v0.22.1
-	k8s.io/apimachinery v0.22.1
-	k8s.io/client-go v0.22.1
-	k8s.io/cloud-provider v0.22.1
-	k8s.io/code-generator v0.22.1
-	k8s.io/component-base v0.22.1
-	k8s.io/csi-translation-lib v0.22.1
-	k8s.io/klog/v2 v2.9.0
-	k8s.io/kubelet v0.22.1
-	k8s.io/utils v0.0.0-20210707171843-4b05e18ac7d9
+	k8s.io/api v0.23.0
+	k8s.io/apimachinery v0.23.0
+	k8s.io/client-go v0.23.0
+	k8s.io/cloud-provider v0.23.0
+	k8s.io/code-generator v0.23.0
+	k8s.io/component-base v0.23.0
+	k8s.io/csi-translation-lib v0.23.0
+	k8s.io/klog/v2 v2.30.0
+	k8s.io/kubelet v0.23.0
+	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b
 	sigs.k8s.io/yaml v1.2.0
 )
 
