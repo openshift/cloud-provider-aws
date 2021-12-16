@@ -287,6 +287,9 @@ const (
 
 	// privateDNSNamePrefix is the prefix added to ENI Private DNS Name.
 	privateDNSNamePrefix = "ip-"
+
+	// rbnNamePrefix is the prefix added to ENI Private DNS Name with RBN.
+	rbnNamePrefix = "i-"
 )
 
 const (
@@ -4161,6 +4164,9 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 	if len(apiService.Spec.Ports) == 0 {
 		return nil, fmt.Errorf("requested load balancer with no ports")
 	}
+	if err := checkMixedProtocol(apiService.Spec.Ports); err != nil {
+		return nil, err
+	}
 	// Figure out what mappings we want on the load balancer
 	listeners := []*elb.Listener{}
 	v2Mappings := []nlbPortMapping{}
@@ -5233,6 +5239,9 @@ func isFargateNode(nodeName string) bool {
 }
 
 func (c *Cloud) nodeNameToProviderID(nodeName types.NodeName) (InstanceID, error) {
+	if strings.HasPrefix(string(nodeName), rbnNamePrefix) {
+		return InstanceID(nodeName), nil
+	}
 	if len(nodeName) == 0 {
 		return "", fmt.Errorf("no nodeName provided")
 	}
@@ -5250,6 +5259,19 @@ func (c *Cloud) nodeNameToProviderID(nodeName types.NodeName) (InstanceID, error
 	}
 
 	return KubernetesInstanceID(node.Spec.ProviderID).MapToAWSInstanceID()
+}
+
+func checkMixedProtocol(ports []v1.ServicePort) error {
+	if len(ports) == 0 {
+		return nil
+	}
+	firstProtocol := ports[0].Protocol
+	for _, port := range ports[1:] {
+		if port.Protocol != firstProtocol {
+			return fmt.Errorf("mixed protocol is not supported for LoadBalancer")
+		}
+	}
+	return nil
 }
 
 func checkProtocol(port v1.ServicePort, annotations map[string]string) error {
