@@ -42,6 +42,8 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 	cmoptions "k8s.io/controller-manager/options"
 	"k8s.io/controller-manager/pkg/clientbuilder"
+	netutils "k8s.io/utils/net"
+
 	// add the related feature gates
 	_ "k8s.io/controller-manager/pkg/features/register"
 )
@@ -49,8 +51,6 @@ import (
 const (
 	// CloudControllerManagerUserAgent is the userAgent name when starting cloud-controller managers.
 	CloudControllerManagerUserAgent = "cloud-controller-manager"
-	// DefaultInsecureCloudControllerManagerPort is the default insecure cloud-controller manager port.
-	DefaultInsecureCloudControllerManagerPort = 0
 )
 
 // CloudControllerManagerOptions is the main context object for the controller manager.
@@ -59,11 +59,9 @@ type CloudControllerManagerOptions struct {
 	KubeCloudShared   *KubeCloudSharedOptions
 	ServiceController *ServiceControllerOptions
 
-	SecureServing *apiserveroptions.SecureServingOptionsWithLoopback
-	// TODO: remove insecure serving mode
-	InsecureServing *apiserveroptions.DeprecatedInsecureServingOptionsWithLoopback
-	Authentication  *apiserveroptions.DelegatingAuthenticationOptions
-	Authorization   *apiserveroptions.DelegatingAuthorizationOptions
+	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
+	Authentication *apiserveroptions.DelegatingAuthenticationOptions
+	Authorization  *apiserveroptions.DelegatingAuthorizationOptions
 
 	Master     string
 	Kubeconfig string
@@ -74,7 +72,7 @@ type CloudControllerManagerOptions struct {
 
 // NewCloudControllerManagerOptions creates a new ExternalCMServer with a default config.
 func NewCloudControllerManagerOptions() (*CloudControllerManagerOptions, error) {
-	componentConfig, err := NewDefaultComponentConfig(DefaultInsecureCloudControllerManagerPort)
+	componentConfig, err := NewDefaultComponentConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -85,12 +83,7 @@ func NewCloudControllerManagerOptions() (*CloudControllerManagerOptions, error) 
 		ServiceController: &ServiceControllerOptions{
 			ServiceControllerConfiguration: &componentConfig.ServiceController,
 		},
-		SecureServing: apiserveroptions.NewSecureServingOptions().WithLoopback(),
-		InsecureServing: (&apiserveroptions.DeprecatedInsecureServingOptions{
-			BindAddress: net.ParseIP(componentConfig.Generic.Address),
-			BindPort:    int(componentConfig.Generic.Port),
-			BindNetwork: "tcp",
-		}).WithLoopback(),
+		SecureServing:             apiserveroptions.NewSecureServingOptions().WithLoopback(),
 		Authentication:            apiserveroptions.NewDelegatingAuthenticationOptions(),
 		Authorization:             apiserveroptions.NewDelegatingAuthorizationOptions(),
 		NodeStatusUpdateFrequency: componentConfig.NodeStatusUpdateFrequency,
@@ -98,7 +91,6 @@ func NewCloudControllerManagerOptions() (*CloudControllerManagerOptions, error) 
 
 	s.Authentication.RemoteKubeConfigFileOptional = true
 	s.Authorization.RemoteKubeConfigFileOptional = true
-	s.Authorization.AlwaysAllowPaths = []string{"/healthz"}
 
 	// Set the PairName but leave certificate directory blank to generate in-memory by default
 	s.SecureServing.ServerCert.CertDirectory = ""
@@ -112,7 +104,7 @@ func NewCloudControllerManagerOptions() (*CloudControllerManagerOptions, error) 
 }
 
 // NewDefaultComponentConfig returns cloud-controller manager configuration object.
-func NewDefaultComponentConfig(insecurePort int32) (*ccmconfig.CloudControllerManagerConfiguration, error) {
+func NewDefaultComponentConfig() (*ccmconfig.CloudControllerManagerConfiguration, error) {
 	versioned := &ccmconfigv1alpha1.CloudControllerManagerConfiguration{}
 	ccmconfigscheme.Scheme.Default(versioned)
 
@@ -120,7 +112,6 @@ func NewDefaultComponentConfig(insecurePort int32) (*ccmconfig.CloudControllerMa
 	if err := ccmconfigscheme.Scheme.Convert(versioned, internal, nil); err != nil {
 		return nil, err
 	}
-	internal.Generic.Port = insecurePort
 	return internal, nil
 }
 
@@ -132,7 +123,6 @@ func (o *CloudControllerManagerOptions) Flags(allControllers, disabledByDefaultC
 	o.ServiceController.AddFlags(fss.FlagSet("service controller"))
 
 	o.SecureServing.AddFlags(fss.FlagSet("secure serving"))
-	o.InsecureServing.AddUnqualifiedFlags(fss.FlagSet("insecure serving"))
 	o.Authentication.AddFlags(fss.FlagSet("authentication"))
 	o.Authorization.AddFlags(fss.FlagSet("authorization"))
 
@@ -156,9 +146,6 @@ func (o *CloudControllerManagerOptions) ApplyTo(c *config.Config, userAgent stri
 		return err
 	}
 	if err = o.ServiceController.ApplyTo(&c.ComponentConfig.ServiceController); err != nil {
-		return err
-	}
-	if err = o.InsecureServing.ApplyTo(&c.InsecureServing, &c.LoopbackClientConfig); err != nil {
 		return err
 	}
 	if err = o.SecureServing.ApplyTo(&c.SecureServing, &c.LoopbackClientConfig); err != nil {
@@ -188,20 +175,16 @@ func (o *CloudControllerManagerOptions) ApplyTo(c *config.Config, userAgent stri
 		return err
 	}
 
-	c.LeaderElectionClient = clientset.NewForConfigOrDie(restclient.AddUserAgent(c.Kubeconfig, "leader-election"))
-
 	c.EventRecorder = createRecorder(c.Client, userAgent)
 
 	rootClientBuilder := clientbuilder.SimpleControllerClientBuilder{
 		ClientConfig: c.Kubeconfig,
 	}
 	if c.ComponentConfig.KubeCloudShared.UseServiceAccountCredentials {
-		c.ClientBuilder = clientbuilder.SAControllerClientBuilder{
-			ClientConfig:         restclient.AnonymousClientConfig(c.Kubeconfig),
-			CoreClient:           c.Client.CoreV1(),
-			AuthenticationClient: c.Client.AuthenticationV1(),
-			Namespace:            metav1.NamespaceSystem,
-		}
+		c.ClientBuilder = clientbuilder.NewDynamicClientBuilder(
+			restclient.AnonymousClientConfig(c.Kubeconfig),
+			c.Client.CoreV1(),
+			metav1.NamespaceSystem)
 	} else {
 		c.ClientBuilder = rootClientBuilder
 	}
@@ -210,9 +193,6 @@ func (o *CloudControllerManagerOptions) ApplyTo(c *config.Config, userAgent stri
 
 	// sync back to component config
 	// TODO: find more elegant way than syncing back the values.
-	c.ComponentConfig.Generic.Port = int32(o.InsecureServing.BindPort)
-	c.ComponentConfig.Generic.Address = o.InsecureServing.BindAddress.String()
-
 	c.ComponentConfig.NodeStatusUpdateFrequency = o.NodeStatusUpdateFrequency
 
 	return nil
@@ -226,7 +206,6 @@ func (o *CloudControllerManagerOptions) Validate(allControllers, disabledByDefau
 	errors = append(errors, o.KubeCloudShared.Validate()...)
 	errors = append(errors, o.ServiceController.Validate()...)
 	errors = append(errors, o.SecureServing.Validate()...)
-	errors = append(errors, o.InsecureServing.Validate()...)
 	errors = append(errors, o.Authentication.Validate()...)
 	errors = append(errors, o.Authorization.Validate()...)
 
@@ -251,7 +230,7 @@ func (o *CloudControllerManagerOptions) Config(allControllers, disabledByDefault
 		return nil, err
 	}
 
-	if err := o.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
+	if err := o.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{netutils.ParseIPSloppy("127.0.0.1")}); err != nil {
 		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
 
