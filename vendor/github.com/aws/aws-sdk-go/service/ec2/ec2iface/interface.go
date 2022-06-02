@@ -945,6 +945,13 @@ type EC2API interface {
 	DescribeExportTasksWithContext(aws.Context, *ec2.DescribeExportTasksInput, ...request.Option) (*ec2.DescribeExportTasksOutput, error)
 	DescribeExportTasksRequest(*ec2.DescribeExportTasksInput) (*request.Request, *ec2.DescribeExportTasksOutput)
 
+	DescribeFastLaunchImages(*ec2.DescribeFastLaunchImagesInput) (*ec2.DescribeFastLaunchImagesOutput, error)
+	DescribeFastLaunchImagesWithContext(aws.Context, *ec2.DescribeFastLaunchImagesInput, ...request.Option) (*ec2.DescribeFastLaunchImagesOutput, error)
+	DescribeFastLaunchImagesRequest(*ec2.DescribeFastLaunchImagesInput) (*request.Request, *ec2.DescribeFastLaunchImagesOutput)
+
+	DescribeFastLaunchImagesPages(*ec2.DescribeFastLaunchImagesInput, func(*ec2.DescribeFastLaunchImagesOutput, bool) bool) error
+	DescribeFastLaunchImagesPagesWithContext(aws.Context, *ec2.DescribeFastLaunchImagesInput, func(*ec2.DescribeFastLaunchImagesOutput, bool) bool, ...request.Option) error
+
 	DescribeFastSnapshotRestores(*ec2.DescribeFastSnapshotRestoresInput) (*ec2.DescribeFastSnapshotRestoresOutput, error)
 	DescribeFastSnapshotRestoresWithContext(aws.Context, *ec2.DescribeFastSnapshotRestoresInput, ...request.Option) (*ec2.DescribeFastSnapshotRestoresOutput, error)
 	DescribeFastSnapshotRestoresRequest(*ec2.DescribeFastSnapshotRestoresInput) (*request.Request, *ec2.DescribeFastSnapshotRestoresOutput)
@@ -1647,6 +1654,10 @@ type EC2API interface {
 	DisableEbsEncryptionByDefaultWithContext(aws.Context, *ec2.DisableEbsEncryptionByDefaultInput, ...request.Option) (*ec2.DisableEbsEncryptionByDefaultOutput, error)
 	DisableEbsEncryptionByDefaultRequest(*ec2.DisableEbsEncryptionByDefaultInput) (*request.Request, *ec2.DisableEbsEncryptionByDefaultOutput)
 
+	DisableFastLaunch(*ec2.DisableFastLaunchInput) (*ec2.DisableFastLaunchOutput, error)
+	DisableFastLaunchWithContext(aws.Context, *ec2.DisableFastLaunchInput, ...request.Option) (*ec2.DisableFastLaunchOutput, error)
+	DisableFastLaunchRequest(*ec2.DisableFastLaunchInput) (*request.Request, *ec2.DisableFastLaunchOutput)
+
 	DisableFastSnapshotRestores(*ec2.DisableFastSnapshotRestoresInput) (*ec2.DisableFastSnapshotRestoresOutput, error)
 	DisableFastSnapshotRestoresWithContext(aws.Context, *ec2.DisableFastSnapshotRestoresInput, ...request.Option) (*ec2.DisableFastSnapshotRestoresOutput, error)
 	DisableFastSnapshotRestoresRequest(*ec2.DisableFastSnapshotRestoresInput) (*request.Request, *ec2.DisableFastSnapshotRestoresOutput)
@@ -1726,6 +1737,10 @@ type EC2API interface {
 	EnableEbsEncryptionByDefault(*ec2.EnableEbsEncryptionByDefaultInput) (*ec2.EnableEbsEncryptionByDefaultOutput, error)
 	EnableEbsEncryptionByDefaultWithContext(aws.Context, *ec2.EnableEbsEncryptionByDefaultInput, ...request.Option) (*ec2.EnableEbsEncryptionByDefaultOutput, error)
 	EnableEbsEncryptionByDefaultRequest(*ec2.EnableEbsEncryptionByDefaultInput) (*request.Request, *ec2.EnableEbsEncryptionByDefaultOutput)
+
+	EnableFastLaunch(*ec2.EnableFastLaunchInput) (*ec2.EnableFastLaunchOutput, error)
+	EnableFastLaunchWithContext(aws.Context, *ec2.EnableFastLaunchInput, ...request.Option) (*ec2.EnableFastLaunchOutput, error)
+	EnableFastLaunchRequest(*ec2.EnableFastLaunchInput) (*request.Request, *ec2.EnableFastLaunchOutput)
 
 	EnableFastSnapshotRestores(*ec2.EnableFastSnapshotRestoresInput) (*ec2.EnableFastSnapshotRestoresOutput, error)
 	EnableFastSnapshotRestoresWithContext(aws.Context, *ec2.EnableFastSnapshotRestoresInput, ...request.Option) (*ec2.EnableFastSnapshotRestoresOutput, error)
@@ -1987,6 +2002,13 @@ type EC2API interface {
 	ImportVolumeWithContext(aws.Context, *ec2.ImportVolumeInput, ...request.Option) (*ec2.ImportVolumeOutput, error)
 	ImportVolumeRequest(*ec2.ImportVolumeInput) (*request.Request, *ec2.ImportVolumeOutput)
 
+	ListImagesInRecycleBin(*ec2.ListImagesInRecycleBinInput) (*ec2.ListImagesInRecycleBinOutput, error)
+	ListImagesInRecycleBinWithContext(aws.Context, *ec2.ListImagesInRecycleBinInput, ...request.Option) (*ec2.ListImagesInRecycleBinOutput, error)
+	ListImagesInRecycleBinRequest(*ec2.ListImagesInRecycleBinInput) (*request.Request, *ec2.ListImagesInRecycleBinOutput)
+
+	ListImagesInRecycleBinPages(*ec2.ListImagesInRecycleBinInput, func(*ec2.ListImagesInRecycleBinOutput, bool) bool) error
+	ListImagesInRecycleBinPagesWithContext(aws.Context, *ec2.ListImagesInRecycleBinInput, func(*ec2.ListImagesInRecycleBinOutput, bool) bool, ...request.Option) error
+
 	ListSnapshotsInRecycleBin(*ec2.ListSnapshotsInRecycleBinInput) (*ec2.ListSnapshotsInRecycleBinOutput, error)
 	ListSnapshotsInRecycleBinWithContext(aws.Context, *ec2.ListSnapshotsInRecycleBinInput, ...request.Option) (*ec2.ListSnapshotsInRecycleBinOutput, error)
 	ListSnapshotsInRecycleBinRequest(*ec2.ListSnapshotsInRecycleBinInput) (*request.Request, *ec2.ListSnapshotsInRecycleBinOutput)
@@ -2065,6 +2087,10 @@ type EC2API interface {
 	ModifyInstanceEventWindow(*ec2.ModifyInstanceEventWindowInput) (*ec2.ModifyInstanceEventWindowOutput, error)
 	ModifyInstanceEventWindowWithContext(aws.Context, *ec2.ModifyInstanceEventWindowInput, ...request.Option) (*ec2.ModifyInstanceEventWindowOutput, error)
 	ModifyInstanceEventWindowRequest(*ec2.ModifyInstanceEventWindowInput) (*request.Request, *ec2.ModifyInstanceEventWindowOutput)
+
+	ModifyInstanceMaintenanceOptions(*ec2.ModifyInstanceMaintenanceOptionsInput) (*ec2.ModifyInstanceMaintenanceOptionsOutput, error)
+	ModifyInstanceMaintenanceOptionsWithContext(aws.Context, *ec2.ModifyInstanceMaintenanceOptionsInput, ...request.Option) (*ec2.ModifyInstanceMaintenanceOptionsOutput, error)
+	ModifyInstanceMaintenanceOptionsRequest(*ec2.ModifyInstanceMaintenanceOptionsInput) (*request.Request, *ec2.ModifyInstanceMaintenanceOptionsOutput)
 
 	ModifyInstanceMetadataOptions(*ec2.ModifyInstanceMetadataOptionsInput) (*ec2.ModifyInstanceMetadataOptionsOutput, error)
 	ModifyInstanceMetadataOptionsWithContext(aws.Context, *ec2.ModifyInstanceMetadataOptionsInput, ...request.Option) (*ec2.ModifyInstanceMetadataOptionsOutput, error)
@@ -2177,6 +2203,10 @@ type EC2API interface {
 	ModifyVpcEndpointServiceConfiguration(*ec2.ModifyVpcEndpointServiceConfigurationInput) (*ec2.ModifyVpcEndpointServiceConfigurationOutput, error)
 	ModifyVpcEndpointServiceConfigurationWithContext(aws.Context, *ec2.ModifyVpcEndpointServiceConfigurationInput, ...request.Option) (*ec2.ModifyVpcEndpointServiceConfigurationOutput, error)
 	ModifyVpcEndpointServiceConfigurationRequest(*ec2.ModifyVpcEndpointServiceConfigurationInput) (*request.Request, *ec2.ModifyVpcEndpointServiceConfigurationOutput)
+
+	ModifyVpcEndpointServicePayerResponsibility(*ec2.ModifyVpcEndpointServicePayerResponsibilityInput) (*ec2.ModifyVpcEndpointServicePayerResponsibilityOutput, error)
+	ModifyVpcEndpointServicePayerResponsibilityWithContext(aws.Context, *ec2.ModifyVpcEndpointServicePayerResponsibilityInput, ...request.Option) (*ec2.ModifyVpcEndpointServicePayerResponsibilityOutput, error)
+	ModifyVpcEndpointServicePayerResponsibilityRequest(*ec2.ModifyVpcEndpointServicePayerResponsibilityInput) (*request.Request, *ec2.ModifyVpcEndpointServicePayerResponsibilityOutput)
 
 	ModifyVpcEndpointServicePermissions(*ec2.ModifyVpcEndpointServicePermissionsInput) (*ec2.ModifyVpcEndpointServicePermissionsOutput, error)
 	ModifyVpcEndpointServicePermissionsWithContext(aws.Context, *ec2.ModifyVpcEndpointServicePermissionsInput, ...request.Option) (*ec2.ModifyVpcEndpointServicePermissionsOutput, error)
@@ -2362,6 +2392,10 @@ type EC2API interface {
 	RestoreAddressToClassicWithContext(aws.Context, *ec2.RestoreAddressToClassicInput, ...request.Option) (*ec2.RestoreAddressToClassicOutput, error)
 	RestoreAddressToClassicRequest(*ec2.RestoreAddressToClassicInput) (*request.Request, *ec2.RestoreAddressToClassicOutput)
 
+	RestoreImageFromRecycleBin(*ec2.RestoreImageFromRecycleBinInput) (*ec2.RestoreImageFromRecycleBinOutput, error)
+	RestoreImageFromRecycleBinWithContext(aws.Context, *ec2.RestoreImageFromRecycleBinInput, ...request.Option) (*ec2.RestoreImageFromRecycleBinOutput, error)
+	RestoreImageFromRecycleBinRequest(*ec2.RestoreImageFromRecycleBinInput) (*request.Request, *ec2.RestoreImageFromRecycleBinOutput)
+
 	RestoreManagedPrefixListVersion(*ec2.RestoreManagedPrefixListVersionInput) (*ec2.RestoreManagedPrefixListVersionOutput, error)
 	RestoreManagedPrefixListVersionWithContext(aws.Context, *ec2.RestoreManagedPrefixListVersionInput, ...request.Option) (*ec2.RestoreManagedPrefixListVersionOutput, error)
 	RestoreManagedPrefixListVersionRequest(*ec2.RestoreManagedPrefixListVersionInput) (*request.Request, *ec2.RestoreManagedPrefixListVersionOutput)
@@ -2509,6 +2543,9 @@ type EC2API interface {
 
 	WaitUntilInstanceTerminated(*ec2.DescribeInstancesInput) error
 	WaitUntilInstanceTerminatedWithContext(aws.Context, *ec2.DescribeInstancesInput, ...request.WaiterOption) error
+
+	WaitUntilInternetGatewayExists(*ec2.DescribeInternetGatewaysInput) error
+	WaitUntilInternetGatewayExistsWithContext(aws.Context, *ec2.DescribeInternetGatewaysInput, ...request.WaiterOption) error
 
 	WaitUntilKeyPairExists(*ec2.DescribeKeyPairsInput) error
 	WaitUntilKeyPairExistsWithContext(aws.Context, *ec2.DescribeKeyPairsInput, ...request.WaiterOption) error
