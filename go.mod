@@ -7,20 +7,21 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.8
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.7.0
-	gopkg.in/gcfg.v1 v1.2.0
-	k8s.io/api v0.24.0
-	k8s.io/apimachinery v0.24.0
-	k8s.io/client-go v0.24.0
-	k8s.io/cloud-provider v0.24.0
-	k8s.io/code-generator v0.24.0
-	k8s.io/component-base v0.24.0
-	k8s.io/controller-manager v0.24.0
-	k8s.io/csi-translation-lib v0.24.0
+	github.com/stretchr/testify v1.7.2
+	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
+	gopkg.in/gcfg.v1 v1.2.3
+	k8s.io/api v0.24.2
+	k8s.io/apimachinery v0.24.2
+	k8s.io/client-go v0.24.2
+	k8s.io/cloud-provider v0.24.2
+	k8s.io/code-generator v0.24.2
+	k8s.io/component-base v0.24.2
+	k8s.io/controller-manager v0.24.2
+	k8s.io/csi-translation-lib v0.24.2
 	k8s.io/klog/v2 v2.60.1
-	k8s.io/kubelet v0.24.0
+	k8s.io/kubelet v0.24.2
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
-	sigs.k8s.io/yaml v1.2.0
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -94,7 +95,6 @@ require (
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	golang.org/x/tools v0.1.10-0.20220218145154-897bd77cd717 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
