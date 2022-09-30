@@ -618,8 +618,7 @@ func (c *Cloud) ensureTargetGroup(targetGroup *elbv2.TargetGroup, serviceName ty
 			return nil, fmt.Errorf("expected only one target group on CreateTargetGroup, got %d groups", len(result.TargetGroups))
 		}
 
-		tg := result.TargetGroups[0]
-		return tg, nil
+		targetGroup = result.TargetGroups[0]
 	}
 
 	// handle instances in service
@@ -1235,7 +1234,8 @@ func (c *Cloud) ensureLoadBalancer(namespacedName types.NamespacedName, loadBala
 
 // syncElbListeners computes a plan to reconcile the desired vs actual state of the listeners on an ELB
 // NOTE: there exists an O(nlgn) implementation for this function. However, as the default limit of
-//       listeners per elb is 100, this implementation is reduced from O(m*n) => O(n).
+//
+//	listeners per elb is 100, this implementation is reduced from O(m*n) => O(n).
 func syncElbListeners(loadBalancerName string, listeners []*elb.Listener, listenerDescriptions []*elb.ListenerDescription) ([]*elb.Listener, []*int64) {
 	foundSet := make(map[int]bool)
 	removals := []*int64{}
