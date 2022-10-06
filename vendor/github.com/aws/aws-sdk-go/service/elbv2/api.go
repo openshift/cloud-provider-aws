@@ -29,13 +29,14 @@ const opAddListenerCertificates = "AddListenerCertificates"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the AddListenerCertificatesRequest method.
-//	req, resp := client.AddListenerCertificatesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the AddListenerCertificatesRequest method.
+//    req, resp := client.AddListenerCertificatesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/AddListenerCertificates
 func (c *ELBV2) AddListenerCertificatesRequest(input *AddListenerCertificatesInput) (req *request.Request, output *AddListenerCertificatesOutput) {
@@ -74,15 +75,14 @@ func (c *ELBV2) AddListenerCertificatesRequest(input *AddListenerCertificatesInp
 // API operation AddListenerCertificates for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeTooManyCertificatesException "TooManyCertificates"
+//   You've reached the limit on the number of certificates per load balancer.
 //
-//   - ErrCodeTooManyCertificatesException "TooManyCertificates"
-//     You've reached the limit on the number of certificates per load balancer.
-//
-//   - ErrCodeCertificateNotFoundException "CertificateNotFound"
-//     The specified certificate does not exist.
+//   * ErrCodeCertificateNotFoundException "CertificateNotFound"
+//   The specified certificate does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/AddListenerCertificates
 func (c *ELBV2) AddListenerCertificates(input *AddListenerCertificatesInput) (*AddListenerCertificatesOutput, error) {
@@ -122,13 +122,14 @@ const opAddTags = "AddTags"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the AddTagsRequest method.
-//	req, resp := client.AddTagsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the AddTagsRequest method.
+//    req, resp := client.AddTagsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/AddTags
 func (c *ELBV2) AddTagsRequest(input *AddTagsInput) (req *request.Request, output *AddTagsOutput) {
@@ -165,24 +166,23 @@ func (c *ELBV2) AddTagsRequest(input *AddTagsInput) (req *request.Request, outpu
 // API operation AddTags for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
+//   A tag key was specified more than once.
 //
-//   - ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
-//     A tag key was specified more than once.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   You've reached the limit on the number of tags per load balancer.
 //
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     You've reached the limit on the number of tags per load balancer.
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
-//
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/AddTags
 func (c *ELBV2) AddTags(input *AddTagsInput) (*AddTagsOutput, error) {
@@ -222,13 +222,14 @@ const opCreateListener = "CreateListener"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateListenerRequest method.
-//	req, resp := client.CreateListenerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateListenerRequest method.
+//    req, resp := client.CreateListenerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateListener
 func (c *ELBV2) CreateListenerRequest(input *CreateListenerInput) (req *request.Request, output *CreateListenerOutput) {
@@ -254,11 +255,11 @@ func (c *ELBV2) CreateListenerRequest(input *CreateListenerInput) (req *request.
 //
 // For more information, see the following:
 //
-//   - Listeners for your Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-listeners.html)
+//    * Listeners for your Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-listeners.html)
 //
-//   - Listeners for your Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-listeners.html)
+//    * Listeners for your Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-listeners.html)
 //
-//   - Listeners for your Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/gateway-listeners.html)
+//    * Listeners for your Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/gateway-listeners.html)
 //
 // This operation is idempotent, which means that it completes at most one time.
 // If you attempt to create multiple listeners with the same settings, each
@@ -272,63 +273,62 @@ func (c *ELBV2) CreateListenerRequest(input *CreateListenerInput) (req *request.
 // API operation CreateListener for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeDuplicateListenerException "DuplicateListener"
+//   A listener with the specified port already exists.
 //
-//   - ErrCodeDuplicateListenerException "DuplicateListener"
-//     A listener with the specified port already exists.
+//   * ErrCodeTooManyListenersException "TooManyListeners"
+//   You've reached the limit on the number of listeners per load balancer.
 //
-//   - ErrCodeTooManyListenersException "TooManyListeners"
-//     You've reached the limit on the number of listeners per load balancer.
+//   * ErrCodeTooManyCertificatesException "TooManyCertificates"
+//   You've reached the limit on the number of certificates per load balancer.
 //
-//   - ErrCodeTooManyCertificatesException "TooManyCertificates"
-//     You've reached the limit on the number of certificates per load balancer.
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
+//   You've reached the limit on the number of load balancers per target group.
 //
-//   - ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
-//     You've reached the limit on the number of load balancers per target group.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
+//   The specified configuration is not valid with this protocol.
 //
-//   - ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
-//     The specified configuration is not valid with this protocol.
+//   * ErrCodeSSLPolicyNotFoundException "SSLPolicyNotFound"
+//   The specified SSL policy does not exist.
 //
-//   - ErrCodeSSLPolicyNotFoundException "SSLPolicyNotFound"
-//     The specified SSL policy does not exist.
+//   * ErrCodeCertificateNotFoundException "CertificateNotFound"
+//   The specified certificate does not exist.
 //
-//   - ErrCodeCertificateNotFoundException "CertificateNotFound"
-//     The specified certificate does not exist.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol is not supported.
 //
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol is not supported.
+//   * ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
+//   You've reached the limit on the number of times a target can be registered
+//   with a load balancer.
 //
-//   - ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
-//     You've reached the limit on the number of times a target can be registered
-//     with a load balancer.
+//   * ErrCodeTooManyTargetsException "TooManyTargets"
+//   You've reached the limit on the number of targets.
 //
-//   - ErrCodeTooManyTargetsException "TooManyTargets"
-//     You've reached the limit on the number of targets.
+//   * ErrCodeTooManyActionsException "TooManyActions"
+//   You've reached the limit on the number of actions per rule.
 //
-//   - ErrCodeTooManyActionsException "TooManyActions"
-//     You've reached the limit on the number of actions per rule.
+//   * ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
+//   The requested action is not valid.
 //
-//   - ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
-//     The requested action is not valid.
+//   * ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
+//   You've reached the limit on the number of unique target groups per load balancer
+//   across all listeners. If a target group is used by multiple actions for a
+//   load balancer, it is counted as only one use.
 //
-//   - ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
-//     You've reached the limit on the number of unique target groups per load balancer
-//     across all listeners. If a target group is used by multiple actions for a
-//     load balancer, it is counted as only one use.
+//   * ErrCodeALPNPolicyNotSupportedException "ALPNPolicyNotFound"
+//   The specified ALPN policy is not supported.
 //
-//   - ErrCodeALPNPolicyNotSupportedException "ALPNPolicyNotFound"
-//     The specified ALPN policy is not supported.
-//
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     You've reached the limit on the number of tags per load balancer.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   You've reached the limit on the number of tags per load balancer.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateListener
 func (c *ELBV2) CreateListener(input *CreateListenerInput) (*CreateListenerOutput, error) {
@@ -368,13 +368,14 @@ const opCreateLoadBalancer = "CreateLoadBalancer"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateLoadBalancerRequest method.
-//	req, resp := client.CreateLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateLoadBalancerRequest method.
+//    req, resp := client.CreateLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateLoadBalancer
 func (c *ELBV2) CreateLoadBalancerRequest(input *CreateLoadBalancerInput) (req *request.Request, output *CreateLoadBalancerOutput) {
@@ -400,11 +401,11 @@ func (c *ELBV2) CreateLoadBalancerRequest(input *CreateLoadBalancerInput) (req *
 //
 // For more information, see the following:
 //
-//   - Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html)
+//    * Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html)
 //
-//   - Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/network-load-balancers.html)
+//    * Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/network-load-balancers.html)
 //
-//   - Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/gateway-load-balancers.html)
+//    * Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/gateway-load-balancers.html)
 //
 // This operation is idempotent, which means that it completes at most one time.
 // If you attempt to create multiple load balancers with the same settings,
@@ -418,46 +419,45 @@ func (c *ELBV2) CreateLoadBalancerRequest(input *CreateLoadBalancerInput) (req *
 // API operation CreateLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeDuplicateLoadBalancerNameException "DuplicateLoadBalancerName"
+//   A load balancer with the specified name already exists.
 //
-//   - ErrCodeDuplicateLoadBalancerNameException "DuplicateLoadBalancerName"
-//     A load balancer with the specified name already exists.
+//   * ErrCodeTooManyLoadBalancersException "TooManyLoadBalancers"
+//   You've reached the limit on the number of load balancers for your Amazon
+//   Web Services account.
 //
-//   - ErrCodeTooManyLoadBalancersException "TooManyLoadBalancers"
-//     You've reached the limit on the number of load balancers for your Amazon
-//     Web Services account.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeSubnetNotFoundException "SubnetNotFound"
+//   The specified subnet does not exist.
 //
-//   - ErrCodeSubnetNotFoundException "SubnetNotFound"
-//     The specified subnet does not exist.
+//   * ErrCodeInvalidSubnetException "InvalidSubnet"
+//   The specified subnet is out of available addresses.
 //
-//   - ErrCodeInvalidSubnetException "InvalidSubnet"
-//     The specified subnet is out of available addresses.
+//   * ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
+//   The specified security group does not exist.
 //
-//   - ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
-//     The specified security group does not exist.
+//   * ErrCodeInvalidSchemeException "InvalidScheme"
+//   The requested scheme is not valid.
 //
-//   - ErrCodeInvalidSchemeException "InvalidScheme"
-//     The requested scheme is not valid.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   You've reached the limit on the number of tags per load balancer.
 //
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     You've reached the limit on the number of tags per load balancer.
+//   * ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
+//   A tag key was specified more than once.
 //
-//   - ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
-//     A tag key was specified more than once.
+//   * ErrCodeResourceInUseException "ResourceInUse"
+//   A specified resource is in use.
 //
-//   - ErrCodeResourceInUseException "ResourceInUse"
-//     A specified resource is in use.
+//   * ErrCodeAllocationIdNotFoundException "AllocationIdNotFound"
+//   The specified allocation ID does not exist.
 //
-//   - ErrCodeAllocationIdNotFoundException "AllocationIdNotFound"
-//     The specified allocation ID does not exist.
+//   * ErrCodeAvailabilityZoneNotSupportedException "AvailabilityZoneNotSupported"
+//   The specified Availability Zone is not supported.
 //
-//   - ErrCodeAvailabilityZoneNotSupportedException "AvailabilityZoneNotSupported"
-//     The specified Availability Zone is not supported.
-//
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateLoadBalancer
 func (c *ELBV2) CreateLoadBalancer(input *CreateLoadBalancerInput) (*CreateLoadBalancerOutput, error) {
@@ -497,13 +497,14 @@ const opCreateRule = "CreateRule"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateRuleRequest method.
-//	req, resp := client.CreateRuleRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateRuleRequest method.
+//    req, resp := client.CreateRuleRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateRule
 func (c *ELBV2) CreateRuleRequest(input *CreateRuleInput) (req *request.Request, output *CreateRuleOutput) {
@@ -542,55 +543,54 @@ func (c *ELBV2) CreateRuleRequest(input *CreateRuleInput) (req *request.Request,
 // API operation CreateRule for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodePriorityInUseException "PriorityInUse"
+//   The specified priority is in use.
 //
-//   - ErrCodePriorityInUseException "PriorityInUse"
-//     The specified priority is in use.
+//   * ErrCodeTooManyTargetGroupsException "TooManyTargetGroups"
+//   You've reached the limit on the number of target groups for your Amazon Web
+//   Services account.
 //
-//   - ErrCodeTooManyTargetGroupsException "TooManyTargetGroups"
-//     You've reached the limit on the number of target groups for your Amazon Web
-//     Services account.
+//   * ErrCodeTooManyRulesException "TooManyRules"
+//   You've reached the limit on the number of rules per load balancer.
 //
-//   - ErrCodeTooManyRulesException "TooManyRules"
-//     You've reached the limit on the number of rules per load balancer.
+//   * ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
+//   You've reached the limit on the number of load balancers per target group.
 //
-//   - ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
-//     You've reached the limit on the number of load balancers per target group.
+//   * ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
+//   The specified configuration is not valid with this protocol.
 //
-//   - ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
-//     The specified configuration is not valid with this protocol.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
+//   You've reached the limit on the number of times a target can be registered
+//   with a load balancer.
 //
-//   - ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
-//     You've reached the limit on the number of times a target can be registered
-//     with a load balancer.
+//   * ErrCodeTooManyTargetsException "TooManyTargets"
+//   You've reached the limit on the number of targets.
 //
-//   - ErrCodeTooManyTargetsException "TooManyTargets"
-//     You've reached the limit on the number of targets.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol is not supported.
 //
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol is not supported.
+//   * ErrCodeTooManyActionsException "TooManyActions"
+//   You've reached the limit on the number of actions per rule.
 //
-//   - ErrCodeTooManyActionsException "TooManyActions"
-//     You've reached the limit on the number of actions per rule.
+//   * ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
+//   The requested action is not valid.
 //
-//   - ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
-//     The requested action is not valid.
+//   * ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
+//   You've reached the limit on the number of unique target groups per load balancer
+//   across all listeners. If a target group is used by multiple actions for a
+//   load balancer, it is counted as only one use.
 //
-//   - ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
-//     You've reached the limit on the number of unique target groups per load balancer
-//     across all listeners. If a target group is used by multiple actions for a
-//     load balancer, it is counted as only one use.
-//
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     You've reached the limit on the number of tags per load balancer.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   You've reached the limit on the number of tags per load balancer.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateRule
 func (c *ELBV2) CreateRule(input *CreateRuleInput) (*CreateRuleOutput, error) {
@@ -630,13 +630,14 @@ const opCreateTargetGroup = "CreateTargetGroup"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateTargetGroupRequest method.
-//	req, resp := client.CreateTargetGroupRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateTargetGroupRequest method.
+//    req, resp := client.CreateTargetGroupRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateTargetGroup
 func (c *ELBV2) CreateTargetGroupRequest(input *CreateTargetGroupInput) (req *request.Request, output *CreateTargetGroupOutput) {
@@ -661,11 +662,11 @@ func (c *ELBV2) CreateTargetGroupRequest(input *CreateTargetGroupInput) (req *re
 //
 // For more information, see the following:
 //
-//   - Target groups for your Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html)
+//    * Target groups for your Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html)
 //
-//   - Target groups for your Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-target-groups.html)
+//    * Target groups for your Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-target-groups.html)
 //
-//   - Target groups for your Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/target-groups.html)
+//    * Target groups for your Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/target-groups.html)
 //
 // This operation is idempotent, which means that it completes at most one time.
 // If you attempt to create multiple target groups with the same settings, each
@@ -679,19 +680,18 @@ func (c *ELBV2) CreateTargetGroupRequest(input *CreateTargetGroupInput) (req *re
 // API operation CreateTargetGroup for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeDuplicateTargetGroupNameException "DuplicateTargetGroupName"
+//   A target group with the specified name already exists.
 //
-//   - ErrCodeDuplicateTargetGroupNameException "DuplicateTargetGroupName"
-//     A target group with the specified name already exists.
+//   * ErrCodeTooManyTargetGroupsException "TooManyTargetGroups"
+//   You've reached the limit on the number of target groups for your Amazon Web
+//   Services account.
 //
-//   - ErrCodeTooManyTargetGroupsException "TooManyTargetGroups"
-//     You've reached the limit on the number of target groups for your Amazon Web
-//     Services account.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
-//
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     You've reached the limit on the number of tags per load balancer.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   You've reached the limit on the number of tags per load balancer.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/CreateTargetGroup
 func (c *ELBV2) CreateTargetGroup(input *CreateTargetGroupInput) (*CreateTargetGroupOutput, error) {
@@ -731,13 +731,14 @@ const opDeleteListener = "DeleteListener"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteListenerRequest method.
-//	req, resp := client.DeleteListenerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteListenerRequest method.
+//    req, resp := client.DeleteListenerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteListener
 func (c *ELBV2) DeleteListenerRequest(input *DeleteListenerInput) (req *request.Request, output *DeleteListenerOutput) {
@@ -772,12 +773,11 @@ func (c *ELBV2) DeleteListenerRequest(input *DeleteListenerInput) (req *request.
 // API operation DeleteListener for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
-//
-//   - ErrCodeResourceInUseException "ResourceInUse"
-//     A specified resource is in use.
+//   * ErrCodeResourceInUseException "ResourceInUse"
+//   A specified resource is in use.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteListener
 func (c *ELBV2) DeleteListener(input *DeleteListenerInput) (*DeleteListenerOutput, error) {
@@ -817,13 +817,14 @@ const opDeleteLoadBalancer = "DeleteLoadBalancer"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteLoadBalancerRequest method.
-//	req, resp := client.DeleteLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteLoadBalancerRequest method.
+//    req, resp := client.DeleteLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteLoadBalancer
 func (c *ELBV2) DeleteLoadBalancerRequest(input *DeleteLoadBalancerInput) (req *request.Request, output *DeleteLoadBalancerOutput) {
@@ -864,15 +865,14 @@ func (c *ELBV2) DeleteLoadBalancerRequest(input *DeleteLoadBalancerInput) (req *
 // API operation DeleteLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
-//
-//   - ErrCodeResourceInUseException "ResourceInUse"
-//     A specified resource is in use.
+//   * ErrCodeResourceInUseException "ResourceInUse"
+//   A specified resource is in use.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteLoadBalancer
 func (c *ELBV2) DeleteLoadBalancer(input *DeleteLoadBalancerInput) (*DeleteLoadBalancerOutput, error) {
@@ -912,13 +912,14 @@ const opDeleteRule = "DeleteRule"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteRuleRequest method.
-//	req, resp := client.DeleteRuleRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteRuleRequest method.
+//    req, resp := client.DeleteRuleRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteRule
 func (c *ELBV2) DeleteRuleRequest(input *DeleteRuleInput) (req *request.Request, output *DeleteRuleOutput) {
@@ -952,12 +953,11 @@ func (c *ELBV2) DeleteRuleRequest(input *DeleteRuleInput) (req *request.Request,
 // API operation DeleteRule for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
-//
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteRule
 func (c *ELBV2) DeleteRule(input *DeleteRuleInput) (*DeleteRuleOutput, error) {
@@ -997,13 +997,14 @@ const opDeleteTargetGroup = "DeleteTargetGroup"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteTargetGroupRequest method.
-//	req, resp := client.DeleteTargetGroupRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteTargetGroupRequest method.
+//    req, resp := client.DeleteTargetGroupRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteTargetGroup
 func (c *ELBV2) DeleteTargetGroupRequest(input *DeleteTargetGroupInput) (req *request.Request, output *DeleteTargetGroupOutput) {
@@ -1040,8 +1041,8 @@ func (c *ELBV2) DeleteTargetGroupRequest(input *DeleteTargetGroupInput) (req *re
 // API operation DeleteTargetGroup for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeResourceInUseException "ResourceInUse"
-//     A specified resource is in use.
+//   * ErrCodeResourceInUseException "ResourceInUse"
+//   A specified resource is in use.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeleteTargetGroup
 func (c *ELBV2) DeleteTargetGroup(input *DeleteTargetGroupInput) (*DeleteTargetGroupOutput, error) {
@@ -1081,13 +1082,14 @@ const opDeregisterTargets = "DeregisterTargets"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeregisterTargetsRequest method.
-//	req, resp := client.DeregisterTargetsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeregisterTargetsRequest method.
+//    req, resp := client.DeregisterTargetsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeregisterTargets
 func (c *ELBV2) DeregisterTargetsRequest(input *DeregisterTargetsInput) (req *request.Request, output *DeregisterTargetsOutput) {
@@ -1121,13 +1123,12 @@ func (c *ELBV2) DeregisterTargetsRequest(input *DeregisterTargetsInput) (req *re
 // API operation DeregisterTargets for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
-//
-//   - ErrCodeInvalidTargetException "InvalidTarget"
-//     The specified target does not exist, is not in the same VPC as the target
-//     group, or has an unsupported instance type.
+//   * ErrCodeInvalidTargetException "InvalidTarget"
+//   The specified target does not exist, is not in the same VPC as the target
+//   group, or has an unsupported instance type.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DeregisterTargets
 func (c *ELBV2) DeregisterTargets(input *DeregisterTargetsInput) (*DeregisterTargetsOutput, error) {
@@ -1167,13 +1168,14 @@ const opDescribeAccountLimits = "DescribeAccountLimits"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeAccountLimitsRequest method.
-//	req, resp := client.DescribeAccountLimitsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeAccountLimitsRequest method.
+//    req, resp := client.DescribeAccountLimitsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeAccountLimits
 func (c *ELBV2) DescribeAccountLimitsRequest(input *DescribeAccountLimitsInput) (req *request.Request, output *DescribeAccountLimitsOutput) {
@@ -1199,11 +1201,11 @@ func (c *ELBV2) DescribeAccountLimitsRequest(input *DescribeAccountLimitsInput) 
 //
 // For more information, see the following:
 //
-//   - Quotas for your Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html)
+//    * Quotas for your Application Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html)
 //
-//   - Quotas for your Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-limits.html)
+//    * Quotas for your Network Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-limits.html)
 //
-//   - Quotas for your Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/quotas-limits.html)
+//    * Quotas for your Gateway Load Balancers (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/quotas-limits.html)
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -1249,13 +1251,14 @@ const opDescribeListenerCertificates = "DescribeListenerCertificates"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeListenerCertificatesRequest method.
-//	req, resp := client.DescribeListenerCertificatesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeListenerCertificatesRequest method.
+//    req, resp := client.DescribeListenerCertificatesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeListenerCertificates
 func (c *ELBV2) DescribeListenerCertificatesRequest(input *DescribeListenerCertificatesInput) (req *request.Request, output *DescribeListenerCertificatesOutput) {
@@ -1295,8 +1298,8 @@ func (c *ELBV2) DescribeListenerCertificatesRequest(input *DescribeListenerCerti
 // API operation DescribeListenerCertificates for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeListenerCertificates
 func (c *ELBV2) DescribeListenerCertificates(input *DescribeListenerCertificatesInput) (*DescribeListenerCertificatesOutput, error) {
@@ -1336,13 +1339,14 @@ const opDescribeListeners = "DescribeListeners"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeListenersRequest method.
-//	req, resp := client.DescribeListenersRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeListenersRequest method.
+//    req, resp := client.DescribeListenersRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeListeners
 func (c *ELBV2) DescribeListenersRequest(input *DescribeListenersInput) (req *request.Request, output *DescribeListenersOutput) {
@@ -1381,15 +1385,14 @@ func (c *ELBV2) DescribeListenersRequest(input *DescribeListenersInput) (req *re
 // API operation DescribeListeners for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol is not supported.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol is not supported.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeListeners
 func (c *ELBV2) DescribeListeners(input *DescribeListenersInput) (*DescribeListenersOutput, error) {
@@ -1421,14 +1424,15 @@ func (c *ELBV2) DescribeListenersWithContext(ctx aws.Context, input *DescribeLis
 //
 // Note: This operation can generate multiple requests to a service.
 //
-//	// Example iterating over at most 3 pages of a DescribeListeners operation.
-//	pageNum := 0
-//	err := client.DescribeListenersPages(params,
-//	    func(page *elbv2.DescribeListenersOutput, lastPage bool) bool {
-//	        pageNum++
-//	        fmt.Println(page)
-//	        return pageNum <= 3
-//	    })
+//    // Example iterating over at most 3 pages of a DescribeListeners operation.
+//    pageNum := 0
+//    err := client.DescribeListenersPages(params,
+//        func(page *elbv2.DescribeListenersOutput, lastPage bool) bool {
+//            pageNum++
+//            fmt.Println(page)
+//            return pageNum <= 3
+//        })
+//
 func (c *ELBV2) DescribeListenersPages(input *DescribeListenersInput, fn func(*DescribeListenersOutput, bool) bool) error {
 	return c.DescribeListenersPagesWithContext(aws.BackgroundContext(), input, fn)
 }
@@ -1480,13 +1484,14 @@ const opDescribeLoadBalancerAttributes = "DescribeLoadBalancerAttributes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeLoadBalancerAttributesRequest method.
-//	req, resp := client.DescribeLoadBalancerAttributesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeLoadBalancerAttributesRequest method.
+//    req, resp := client.DescribeLoadBalancerAttributesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeLoadBalancerAttributes
 func (c *ELBV2) DescribeLoadBalancerAttributesRequest(input *DescribeLoadBalancerAttributesInput) (req *request.Request, output *DescribeLoadBalancerAttributesOutput) {
@@ -1512,14 +1517,14 @@ func (c *ELBV2) DescribeLoadBalancerAttributesRequest(input *DescribeLoadBalance
 //
 // For more information, see the following:
 //
-//   - Load balancer attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html#load-balancer-attributes)
-//     in the Application Load Balancers Guide
+//    * Load balancer attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html#load-balancer-attributes)
+//    in the Application Load Balancers Guide
 //
-//   - Load balancer attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/network-load-balancers.html#load-balancer-attributes)
-//     in the Network Load Balancers Guide
+//    * Load balancer attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/network-load-balancers.html#load-balancer-attributes)
+//    in the Network Load Balancers Guide
 //
-//   - Load balancer attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/gateway-load-balancers.html#load-balancer-attributes)
-//     in the Gateway Load Balancers Guide
+//    * Load balancer attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/gateway-load-balancers.html#load-balancer-attributes)
+//    in the Gateway Load Balancers Guide
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -1529,8 +1534,8 @@ func (c *ELBV2) DescribeLoadBalancerAttributesRequest(input *DescribeLoadBalance
 // API operation DescribeLoadBalancerAttributes for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeLoadBalancerAttributes
 func (c *ELBV2) DescribeLoadBalancerAttributes(input *DescribeLoadBalancerAttributesInput) (*DescribeLoadBalancerAttributesOutput, error) {
@@ -1570,13 +1575,14 @@ const opDescribeLoadBalancers = "DescribeLoadBalancers"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeLoadBalancersRequest method.
-//	req, resp := client.DescribeLoadBalancersRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeLoadBalancersRequest method.
+//    req, resp := client.DescribeLoadBalancersRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeLoadBalancers
 func (c *ELBV2) DescribeLoadBalancersRequest(input *DescribeLoadBalancersInput) (req *request.Request, output *DescribeLoadBalancersOutput) {
@@ -1613,8 +1619,8 @@ func (c *ELBV2) DescribeLoadBalancersRequest(input *DescribeLoadBalancersInput) 
 // API operation DescribeLoadBalancers for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeLoadBalancers
 func (c *ELBV2) DescribeLoadBalancers(input *DescribeLoadBalancersInput) (*DescribeLoadBalancersOutput, error) {
@@ -1646,14 +1652,15 @@ func (c *ELBV2) DescribeLoadBalancersWithContext(ctx aws.Context, input *Describ
 //
 // Note: This operation can generate multiple requests to a service.
 //
-//	// Example iterating over at most 3 pages of a DescribeLoadBalancers operation.
-//	pageNum := 0
-//	err := client.DescribeLoadBalancersPages(params,
-//	    func(page *elbv2.DescribeLoadBalancersOutput, lastPage bool) bool {
-//	        pageNum++
-//	        fmt.Println(page)
-//	        return pageNum <= 3
-//	    })
+//    // Example iterating over at most 3 pages of a DescribeLoadBalancers operation.
+//    pageNum := 0
+//    err := client.DescribeLoadBalancersPages(params,
+//        func(page *elbv2.DescribeLoadBalancersOutput, lastPage bool) bool {
+//            pageNum++
+//            fmt.Println(page)
+//            return pageNum <= 3
+//        })
+//
 func (c *ELBV2) DescribeLoadBalancersPages(input *DescribeLoadBalancersInput, fn func(*DescribeLoadBalancersOutput, bool) bool) error {
 	return c.DescribeLoadBalancersPagesWithContext(aws.BackgroundContext(), input, fn)
 }
@@ -1705,13 +1712,14 @@ const opDescribeRules = "DescribeRules"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeRulesRequest method.
-//	req, resp := client.DescribeRulesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeRulesRequest method.
+//    req, resp := client.DescribeRulesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeRules
 func (c *ELBV2) DescribeRulesRequest(input *DescribeRulesInput) (req *request.Request, output *DescribeRulesOutput) {
@@ -1743,15 +1751,14 @@ func (c *ELBV2) DescribeRulesRequest(input *DescribeRulesInput) (req *request.Re
 // API operation DescribeRules for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
-//
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol is not supported.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol is not supported.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeRules
 func (c *ELBV2) DescribeRules(input *DescribeRulesInput) (*DescribeRulesOutput, error) {
@@ -1791,13 +1798,14 @@ const opDescribeSSLPolicies = "DescribeSSLPolicies"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeSSLPoliciesRequest method.
-//	req, resp := client.DescribeSSLPoliciesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeSSLPoliciesRequest method.
+//    req, resp := client.DescribeSSLPoliciesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeSSLPolicies
 func (c *ELBV2) DescribeSSLPoliciesRequest(input *DescribeSSLPoliciesInput) (req *request.Request, output *DescribeSSLPoliciesOutput) {
@@ -1832,8 +1840,8 @@ func (c *ELBV2) DescribeSSLPoliciesRequest(input *DescribeSSLPoliciesInput) (req
 // API operation DescribeSSLPolicies for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeSSLPolicyNotFoundException "SSLPolicyNotFound"
-//     The specified SSL policy does not exist.
+//   * ErrCodeSSLPolicyNotFoundException "SSLPolicyNotFound"
+//   The specified SSL policy does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeSSLPolicies
 func (c *ELBV2) DescribeSSLPolicies(input *DescribeSSLPoliciesInput) (*DescribeSSLPoliciesOutput, error) {
@@ -1873,13 +1881,14 @@ const opDescribeTags = "DescribeTags"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeTagsRequest method.
-//	req, resp := client.DescribeTagsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeTagsRequest method.
+//    req, resp := client.DescribeTagsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTags
 func (c *ELBV2) DescribeTagsRequest(input *DescribeTagsInput) (req *request.Request, output *DescribeTagsOutput) {
@@ -1912,18 +1921,17 @@ func (c *ELBV2) DescribeTagsRequest(input *DescribeTagsInput) (req *request.Requ
 // API operation DescribeTags for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
-//
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTags
 func (c *ELBV2) DescribeTags(input *DescribeTagsInput) (*DescribeTagsOutput, error) {
@@ -1963,13 +1971,14 @@ const opDescribeTargetGroupAttributes = "DescribeTargetGroupAttributes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeTargetGroupAttributesRequest method.
-//	req, resp := client.DescribeTargetGroupAttributesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeTargetGroupAttributesRequest method.
+//    req, resp := client.DescribeTargetGroupAttributesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTargetGroupAttributes
 func (c *ELBV2) DescribeTargetGroupAttributesRequest(input *DescribeTargetGroupAttributesInput) (req *request.Request, output *DescribeTargetGroupAttributesOutput) {
@@ -1994,14 +2003,14 @@ func (c *ELBV2) DescribeTargetGroupAttributesRequest(input *DescribeTargetGroupA
 //
 // For more information, see the following:
 //
-//   - Target group attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html#target-group-attributes)
-//     in the Application Load Balancers Guide
+//    * Target group attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html#target-group-attributes)
+//    in the Application Load Balancers Guide
 //
-//   - Target group attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-target-groups.html#target-group-attributes)
-//     in the Network Load Balancers Guide
+//    * Target group attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-target-groups.html#target-group-attributes)
+//    in the Network Load Balancers Guide
 //
-//   - Target group attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/target-groups.html#target-group-attributes)
-//     in the Gateway Load Balancers Guide
+//    * Target group attributes (https://docs.aws.amazon.com/elasticloadbalancing/latest/gateway/target-groups.html#target-group-attributes)
+//    in the Gateway Load Balancers Guide
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -2011,8 +2020,8 @@ func (c *ELBV2) DescribeTargetGroupAttributesRequest(input *DescribeTargetGroupA
 // API operation DescribeTargetGroupAttributes for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTargetGroupAttributes
 func (c *ELBV2) DescribeTargetGroupAttributes(input *DescribeTargetGroupAttributesInput) (*DescribeTargetGroupAttributesOutput, error) {
@@ -2052,13 +2061,14 @@ const opDescribeTargetGroups = "DescribeTargetGroups"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeTargetGroupsRequest method.
-//	req, resp := client.DescribeTargetGroupsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeTargetGroupsRequest method.
+//    req, resp := client.DescribeTargetGroupsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTargetGroups
 func (c *ELBV2) DescribeTargetGroupsRequest(input *DescribeTargetGroupsInput) (req *request.Request, output *DescribeTargetGroupsOutput) {
@@ -2098,12 +2108,11 @@ func (c *ELBV2) DescribeTargetGroupsRequest(input *DescribeTargetGroupsInput) (r
 // API operation DescribeTargetGroups for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTargetGroups
 func (c *ELBV2) DescribeTargetGroups(input *DescribeTargetGroupsInput) (*DescribeTargetGroupsOutput, error) {
@@ -2135,14 +2144,15 @@ func (c *ELBV2) DescribeTargetGroupsWithContext(ctx aws.Context, input *Describe
 //
 // Note: This operation can generate multiple requests to a service.
 //
-//	// Example iterating over at most 3 pages of a DescribeTargetGroups operation.
-//	pageNum := 0
-//	err := client.DescribeTargetGroupsPages(params,
-//	    func(page *elbv2.DescribeTargetGroupsOutput, lastPage bool) bool {
-//	        pageNum++
-//	        fmt.Println(page)
-//	        return pageNum <= 3
-//	    })
+//    // Example iterating over at most 3 pages of a DescribeTargetGroups operation.
+//    pageNum := 0
+//    err := client.DescribeTargetGroupsPages(params,
+//        func(page *elbv2.DescribeTargetGroupsOutput, lastPage bool) bool {
+//            pageNum++
+//            fmt.Println(page)
+//            return pageNum <= 3
+//        })
+//
 func (c *ELBV2) DescribeTargetGroupsPages(input *DescribeTargetGroupsInput, fn func(*DescribeTargetGroupsOutput, bool) bool) error {
 	return c.DescribeTargetGroupsPagesWithContext(aws.BackgroundContext(), input, fn)
 }
@@ -2194,13 +2204,14 @@ const opDescribeTargetHealth = "DescribeTargetHealth"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeTargetHealthRequest method.
-//	req, resp := client.DescribeTargetHealthRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeTargetHealthRequest method.
+//    req, resp := client.DescribeTargetHealthRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTargetHealth
 func (c *ELBV2) DescribeTargetHealthRequest(input *DescribeTargetHealthInput) (req *request.Request, output *DescribeTargetHealthOutput) {
@@ -2231,17 +2242,16 @@ func (c *ELBV2) DescribeTargetHealthRequest(input *DescribeTargetHealthInput) (r
 // API operation DescribeTargetHealth for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeInvalidTargetException "InvalidTarget"
+//   The specified target does not exist, is not in the same VPC as the target
+//   group, or has an unsupported instance type.
 //
-//   - ErrCodeInvalidTargetException "InvalidTarget"
-//     The specified target does not exist, is not in the same VPC as the target
-//     group, or has an unsupported instance type.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
-//
-//   - ErrCodeHealthUnavailableException "HealthUnavailable"
-//     The health of the specified targets could not be retrieved due to an internal
-//     error.
+//   * ErrCodeHealthUnavailableException "HealthUnavailable"
+//   The health of the specified targets could not be retrieved due to an internal
+//   error.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/DescribeTargetHealth
 func (c *ELBV2) DescribeTargetHealth(input *DescribeTargetHealthInput) (*DescribeTargetHealthOutput, error) {
@@ -2281,13 +2291,14 @@ const opModifyListener = "ModifyListener"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ModifyListenerRequest method.
-//	req, resp := client.ModifyListenerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ModifyListenerRequest method.
+//    req, resp := client.ModifyListenerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyListener
 func (c *ELBV2) ModifyListenerRequest(input *ModifyListenerInput) (req *request.Request, output *ModifyListenerOutput) {
@@ -2328,60 +2339,59 @@ func (c *ELBV2) ModifyListenerRequest(input *ModifyListenerInput) (req *request.
 // API operation ModifyListener for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeDuplicateListenerException "DuplicateListener"
+//   A listener with the specified port already exists.
 //
-//   - ErrCodeDuplicateListenerException "DuplicateListener"
-//     A listener with the specified port already exists.
+//   * ErrCodeTooManyListenersException "TooManyListeners"
+//   You've reached the limit on the number of listeners per load balancer.
 //
-//   - ErrCodeTooManyListenersException "TooManyListeners"
-//     You've reached the limit on the number of listeners per load balancer.
+//   * ErrCodeTooManyCertificatesException "TooManyCertificates"
+//   You've reached the limit on the number of certificates per load balancer.
 //
-//   - ErrCodeTooManyCertificatesException "TooManyCertificates"
-//     You've reached the limit on the number of certificates per load balancer.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
+//   You've reached the limit on the number of load balancers per target group.
 //
-//   - ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
-//     You've reached the limit on the number of load balancers per target group.
+//   * ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
+//   The specified configuration is not valid with this protocol.
 //
-//   - ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
-//     The specified configuration is not valid with this protocol.
+//   * ErrCodeSSLPolicyNotFoundException "SSLPolicyNotFound"
+//   The specified SSL policy does not exist.
 //
-//   - ErrCodeSSLPolicyNotFoundException "SSLPolicyNotFound"
-//     The specified SSL policy does not exist.
+//   * ErrCodeCertificateNotFoundException "CertificateNotFound"
+//   The specified certificate does not exist.
 //
-//   - ErrCodeCertificateNotFoundException "CertificateNotFound"
-//     The specified certificate does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol is not supported.
 //
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol is not supported.
+//   * ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
+//   You've reached the limit on the number of times a target can be registered
+//   with a load balancer.
 //
-//   - ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
-//     You've reached the limit on the number of times a target can be registered
-//     with a load balancer.
+//   * ErrCodeTooManyTargetsException "TooManyTargets"
+//   You've reached the limit on the number of targets.
 //
-//   - ErrCodeTooManyTargetsException "TooManyTargets"
-//     You've reached the limit on the number of targets.
+//   * ErrCodeTooManyActionsException "TooManyActions"
+//   You've reached the limit on the number of actions per rule.
 //
-//   - ErrCodeTooManyActionsException "TooManyActions"
-//     You've reached the limit on the number of actions per rule.
+//   * ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
+//   The requested action is not valid.
 //
-//   - ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
-//     The requested action is not valid.
+//   * ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
+//   You've reached the limit on the number of unique target groups per load balancer
+//   across all listeners. If a target group is used by multiple actions for a
+//   load balancer, it is counted as only one use.
 //
-//   - ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
-//     You've reached the limit on the number of unique target groups per load balancer
-//     across all listeners. If a target group is used by multiple actions for a
-//     load balancer, it is counted as only one use.
-//
-//   - ErrCodeALPNPolicyNotSupportedException "ALPNPolicyNotFound"
-//     The specified ALPN policy is not supported.
+//   * ErrCodeALPNPolicyNotSupportedException "ALPNPolicyNotFound"
+//   The specified ALPN policy is not supported.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyListener
 func (c *ELBV2) ModifyListener(input *ModifyListenerInput) (*ModifyListenerOutput, error) {
@@ -2421,13 +2431,14 @@ const opModifyLoadBalancerAttributes = "ModifyLoadBalancerAttributes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ModifyLoadBalancerAttributesRequest method.
-//	req, resp := client.ModifyLoadBalancerAttributesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ModifyLoadBalancerAttributesRequest method.
+//    req, resp := client.ModifyLoadBalancerAttributesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyLoadBalancerAttributes
 func (c *ELBV2) ModifyLoadBalancerAttributesRequest(input *ModifyLoadBalancerAttributesInput) (req *request.Request, output *ModifyLoadBalancerAttributesOutput) {
@@ -2463,12 +2474,11 @@ func (c *ELBV2) ModifyLoadBalancerAttributesRequest(input *ModifyLoadBalancerAtt
 // API operation ModifyLoadBalancerAttributes for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyLoadBalancerAttributes
 func (c *ELBV2) ModifyLoadBalancerAttributes(input *ModifyLoadBalancerAttributesInput) (*ModifyLoadBalancerAttributesOutput, error) {
@@ -2508,13 +2518,14 @@ const opModifyRule = "ModifyRule"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ModifyRuleRequest method.
-//	req, resp := client.ModifyRuleRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ModifyRuleRequest method.
+//    req, resp := client.ModifyRuleRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyRule
 func (c *ELBV2) ModifyRuleRequest(input *ModifyRuleInput) (req *request.Request, output *ModifyRuleOutput) {
@@ -2550,42 +2561,41 @@ func (c *ELBV2) ModifyRuleRequest(input *ModifyRuleInput) (req *request.Request,
 // API operation ModifyRule for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
+//   You've reached the limit on the number of load balancers per target group.
 //
-//   - ErrCodeTargetGroupAssociationLimitException "TargetGroupAssociationLimit"
-//     You've reached the limit on the number of load balancers per target group.
+//   * ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
+//   The specified configuration is not valid with this protocol.
 //
-//   - ErrCodeIncompatibleProtocolsException "IncompatibleProtocols"
-//     The specified configuration is not valid with this protocol.
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
+//   * ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
+//   You've reached the limit on the number of times a target can be registered
+//   with a load balancer.
 //
-//   - ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
-//     You've reached the limit on the number of times a target can be registered
-//     with a load balancer.
+//   * ErrCodeTooManyTargetsException "TooManyTargets"
+//   You've reached the limit on the number of targets.
 //
-//   - ErrCodeTooManyTargetsException "TooManyTargets"
-//     You've reached the limit on the number of targets.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol is not supported.
 //
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol is not supported.
+//   * ErrCodeTooManyActionsException "TooManyActions"
+//   You've reached the limit on the number of actions per rule.
 //
-//   - ErrCodeTooManyActionsException "TooManyActions"
-//     You've reached the limit on the number of actions per rule.
+//   * ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
+//   The requested action is not valid.
 //
-//   - ErrCodeInvalidLoadBalancerActionException "InvalidLoadBalancerAction"
-//     The requested action is not valid.
-//
-//   - ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
-//     You've reached the limit on the number of unique target groups per load balancer
-//     across all listeners. If a target group is used by multiple actions for a
-//     load balancer, it is counted as only one use.
+//   * ErrCodeTooManyUniqueTargetGroupsPerLoadBalancerException "TooManyUniqueTargetGroupsPerLoadBalancer"
+//   You've reached the limit on the number of unique target groups per load balancer
+//   across all listeners. If a target group is used by multiple actions for a
+//   load balancer, it is counted as only one use.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyRule
 func (c *ELBV2) ModifyRule(input *ModifyRuleInput) (*ModifyRuleOutput, error) {
@@ -2625,13 +2635,14 @@ const opModifyTargetGroup = "ModifyTargetGroup"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ModifyTargetGroupRequest method.
-//	req, resp := client.ModifyTargetGroupRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ModifyTargetGroupRequest method.
+//    req, resp := client.ModifyTargetGroupRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyTargetGroup
 func (c *ELBV2) ModifyTargetGroupRequest(input *ModifyTargetGroupInput) (req *request.Request, output *ModifyTargetGroupOutput) {
@@ -2655,9 +2666,6 @@ func (c *ELBV2) ModifyTargetGroupRequest(input *ModifyTargetGroupInput) (req *re
 // Modifies the health checks used when evaluating the health state of the targets
 // in the specified target group.
 //
-// If the protocol of the target group is TCP, TLS, UDP, or TCP_UDP, you can't
-// modify the health check protocol, interval, timeout, or success codes.
-//
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
 // the error.
@@ -2666,12 +2674,11 @@ func (c *ELBV2) ModifyTargetGroupRequest(input *ModifyTargetGroupInput) (req *re
 // API operation ModifyTargetGroup for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyTargetGroup
 func (c *ELBV2) ModifyTargetGroup(input *ModifyTargetGroupInput) (*ModifyTargetGroupOutput, error) {
@@ -2711,13 +2718,14 @@ const opModifyTargetGroupAttributes = "ModifyTargetGroupAttributes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ModifyTargetGroupAttributesRequest method.
-//	req, resp := client.ModifyTargetGroupAttributesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ModifyTargetGroupAttributesRequest method.
+//    req, resp := client.ModifyTargetGroupAttributesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyTargetGroupAttributes
 func (c *ELBV2) ModifyTargetGroupAttributesRequest(input *ModifyTargetGroupAttributesInput) (req *request.Request, output *ModifyTargetGroupAttributesOutput) {
@@ -2748,12 +2756,11 @@ func (c *ELBV2) ModifyTargetGroupAttributesRequest(input *ModifyTargetGroupAttri
 // API operation ModifyTargetGroupAttributes for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/ModifyTargetGroupAttributes
 func (c *ELBV2) ModifyTargetGroupAttributes(input *ModifyTargetGroupAttributesInput) (*ModifyTargetGroupAttributesOutput, error) {
@@ -2793,13 +2800,14 @@ const opRegisterTargets = "RegisterTargets"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the RegisterTargetsRequest method.
-//	req, resp := client.RegisterTargetsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the RegisterTargetsRequest method.
+//    req, resp := client.RegisterTargetsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/RegisterTargets
 func (c *ELBV2) RegisterTargetsRequest(input *RegisterTargetsInput) (req *request.Request, output *RegisterTargetsOutput) {
@@ -2844,20 +2852,19 @@ func (c *ELBV2) RegisterTargetsRequest(input *RegisterTargetsInput) (req *reques
 // API operation RegisterTargets for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeTooManyTargetsException "TooManyTargets"
+//   You've reached the limit on the number of targets.
 //
-//   - ErrCodeTooManyTargetsException "TooManyTargets"
-//     You've reached the limit on the number of targets.
+//   * ErrCodeInvalidTargetException "InvalidTarget"
+//   The specified target does not exist, is not in the same VPC as the target
+//   group, or has an unsupported instance type.
 //
-//   - ErrCodeInvalidTargetException "InvalidTarget"
-//     The specified target does not exist, is not in the same VPC as the target
-//     group, or has an unsupported instance type.
-//
-//   - ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
-//     You've reached the limit on the number of times a target can be registered
-//     with a load balancer.
+//   * ErrCodeTooManyRegistrationsForTargetIdException "TooManyRegistrationsForTargetId"
+//   You've reached the limit on the number of times a target can be registered
+//   with a load balancer.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/RegisterTargets
 func (c *ELBV2) RegisterTargets(input *RegisterTargetsInput) (*RegisterTargetsOutput, error) {
@@ -2897,13 +2904,14 @@ const opRemoveListenerCertificates = "RemoveListenerCertificates"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the RemoveListenerCertificatesRequest method.
-//	req, resp := client.RemoveListenerCertificatesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the RemoveListenerCertificatesRequest method.
+//    req, resp := client.RemoveListenerCertificatesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/RemoveListenerCertificates
 func (c *ELBV2) RemoveListenerCertificatesRequest(input *RemoveListenerCertificatesInput) (req *request.Request, output *RemoveListenerCertificatesOutput) {
@@ -2936,12 +2944,11 @@ func (c *ELBV2) RemoveListenerCertificatesRequest(input *RemoveListenerCertifica
 // API operation RemoveListenerCertificates for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
-//
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/RemoveListenerCertificates
 func (c *ELBV2) RemoveListenerCertificates(input *RemoveListenerCertificatesInput) (*RemoveListenerCertificatesOutput, error) {
@@ -2981,13 +2988,14 @@ const opRemoveTags = "RemoveTags"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the RemoveTagsRequest method.
-//	req, resp := client.RemoveTagsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the RemoveTagsRequest method.
+//    req, resp := client.RemoveTagsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/RemoveTags
 func (c *ELBV2) RemoveTagsRequest(input *RemoveTagsInput) (req *request.Request, output *RemoveTagsOutput) {
@@ -3021,21 +3029,20 @@ func (c *ELBV2) RemoveTagsRequest(input *RemoveTagsInput) (req *request.Request,
 // API operation RemoveTags for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
+//   The specified target group does not exist.
 //
-//   - ErrCodeTargetGroupNotFoundException "TargetGroupNotFound"
-//     The specified target group does not exist.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The specified listener does not exist.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The specified listener does not exist.
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
-//
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     You've reached the limit on the number of tags per load balancer.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   You've reached the limit on the number of tags per load balancer.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/RemoveTags
 func (c *ELBV2) RemoveTags(input *RemoveTagsInput) (*RemoveTagsOutput, error) {
@@ -3075,13 +3082,14 @@ const opSetIpAddressType = "SetIpAddressType"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetIpAddressTypeRequest method.
-//	req, resp := client.SetIpAddressTypeRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetIpAddressTypeRequest method.
+//    req, resp := client.SetIpAddressTypeRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetIpAddressType
 func (c *ELBV2) SetIpAddressTypeRequest(input *SetIpAddressTypeInput) (req *request.Request, output *SetIpAddressTypeOutput) {
@@ -3113,15 +3121,14 @@ func (c *ELBV2) SetIpAddressTypeRequest(input *SetIpAddressTypeInput) (req *requ
 // API operation SetIpAddressType for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
-//
-//   - ErrCodeInvalidSubnetException "InvalidSubnet"
-//     The specified subnet is out of available addresses.
+//   * ErrCodeInvalidSubnetException "InvalidSubnet"
+//   The specified subnet is out of available addresses.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetIpAddressType
 func (c *ELBV2) SetIpAddressType(input *SetIpAddressTypeInput) (*SetIpAddressTypeOutput, error) {
@@ -3161,13 +3168,14 @@ const opSetRulePriorities = "SetRulePriorities"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetRulePrioritiesRequest method.
-//	req, resp := client.SetRulePrioritiesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetRulePrioritiesRequest method.
+//    req, resp := client.SetRulePrioritiesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetRulePriorities
 func (c *ELBV2) SetRulePrioritiesRequest(input *SetRulePrioritiesInput) (req *request.Request, output *SetRulePrioritiesOutput) {
@@ -3202,15 +3210,14 @@ func (c *ELBV2) SetRulePrioritiesRequest(input *SetRulePrioritiesInput) (req *re
 // API operation SetRulePriorities for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeRuleNotFoundException "RuleNotFound"
+//   The specified rule does not exist.
 //
-//   - ErrCodeRuleNotFoundException "RuleNotFound"
-//     The specified rule does not exist.
+//   * ErrCodePriorityInUseException "PriorityInUse"
+//   The specified priority is in use.
 //
-//   - ErrCodePriorityInUseException "PriorityInUse"
-//     The specified priority is in use.
-//
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetRulePriorities
 func (c *ELBV2) SetRulePriorities(input *SetRulePrioritiesInput) (*SetRulePrioritiesOutput, error) {
@@ -3250,13 +3257,14 @@ const opSetSecurityGroups = "SetSecurityGroups"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetSecurityGroupsRequest method.
-//	req, resp := client.SetSecurityGroupsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetSecurityGroupsRequest method.
+//    req, resp := client.SetSecurityGroupsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetSecurityGroups
 func (c *ELBV2) SetSecurityGroupsRequest(input *SetSecurityGroupsInput) (req *request.Request, output *SetSecurityGroupsOutput) {
@@ -3292,15 +3300,14 @@ func (c *ELBV2) SetSecurityGroupsRequest(input *SetSecurityGroupsInput) (req *re
 // API operation SetSecurityGroups for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
-//
-//   - ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
-//     The specified security group does not exist.
+//   * ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
+//   The specified security group does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetSecurityGroups
 func (c *ELBV2) SetSecurityGroups(input *SetSecurityGroupsInput) (*SetSecurityGroupsOutput, error) {
@@ -3340,13 +3347,14 @@ const opSetSubnets = "SetSubnets"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetSubnetsRequest method.
-//	req, resp := client.SetSubnetsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetSubnetsRequest method.
+//    req, resp := client.SetSubnetsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetSubnets
 func (c *ELBV2) SetSubnetsRequest(input *SetSubnetsInput) (req *request.Request, output *SetSubnetsOutput) {
@@ -3383,24 +3391,23 @@ func (c *ELBV2) SetSubnetsRequest(input *SetSubnetsInput) (req *request.Request,
 // API operation SetSubnets for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeLoadBalancerNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration is not valid.
+//   * ErrCodeSubnetNotFoundException "SubnetNotFound"
+//   The specified subnet does not exist.
 //
-//   - ErrCodeSubnetNotFoundException "SubnetNotFound"
-//     The specified subnet does not exist.
+//   * ErrCodeInvalidSubnetException "InvalidSubnet"
+//   The specified subnet is out of available addresses.
 //
-//   - ErrCodeInvalidSubnetException "InvalidSubnet"
-//     The specified subnet is out of available addresses.
+//   * ErrCodeAllocationIdNotFoundException "AllocationIdNotFound"
+//   The specified allocation ID does not exist.
 //
-//   - ErrCodeAllocationIdNotFoundException "AllocationIdNotFound"
-//     The specified allocation ID does not exist.
-//
-//   - ErrCodeAvailabilityZoneNotSupportedException "AvailabilityZoneNotSupported"
-//     The specified Availability Zone is not supported.
+//   * ErrCodeAvailabilityZoneNotSupportedException "AvailabilityZoneNotSupported"
+//   The specified Availability Zone is not supported.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancingv2-2015-12-01/SetSubnets
 func (c *ELBV2) SetSubnets(input *SetSubnetsInput) (*SetSubnetsOutput, error) {
@@ -4467,7 +4474,7 @@ type CreateLoadBalancerInput struct {
 	SecurityGroups []*string `type:"list"`
 
 	// The IDs of the public subnets. You can specify only one subnet per Availability
-	// Zone. You must specify either subnets or subnet mappings, but not both.
+	// Zone. You must specify either subnets or subnet mappings.
 	//
 	// [Application Load Balancers] You must specify subnets from at least two Availability
 	// Zones. You cannot specify Elastic IP addresses for your subnets.
@@ -4489,8 +4496,7 @@ type CreateLoadBalancerInput struct {
 	SubnetMappings []*SubnetMapping `type:"list"`
 
 	// The IDs of the public subnets. You can specify only one subnet per Availability
-	// Zone. You must specify either subnets or subnet mappings, but not both. To
-	// specify an Elastic IP address, specify subnet mappings instead of subnets.
+	// Zone. You must specify either subnets or subnet mappings.
 	//
 	// [Application Load Balancers] You must specify subnets from at least two Availability
 	// Zones.
@@ -4806,11 +4812,10 @@ type CreateTargetGroupInput struct {
 	HealthCheckEnabled *bool `type:"boolean"`
 
 	// The approximate amount of time, in seconds, between health checks of an individual
-	// target. If the target group protocol is HTTP or HTTPS, the default is 30
-	// seconds. If the target group protocol is TCP, TLS, UDP, or TCP_UDP, the supported
-	// values are 10 and 30 seconds and the default is 30 seconds. If the target
-	// group protocol is GENEVE, the default is 10 seconds. If the target type is
-	// lambda, the default is 35 seconds.
+	// target. If the target group protocol is TCP, TLS, UDP, or TCP_UDP, the supported
+	// values are 10 and 30 seconds. If the target group protocol is HTTP or HTTPS,
+	// the default is 30 seconds. If the target group protocol is GENEVE, the default
+	// is 10 seconds. If the target type is lambda, the default is 35 seconds.
 	HealthCheckIntervalSeconds *int64 `min:"5" type:"integer"`
 
 	// [HTTP/HTTPS health checks] The destination for health checks on the targets.
@@ -7246,7 +7251,7 @@ type LoadBalancerAttribute struct {
 	//    * access_logs.s3.prefix - The prefix for the location in the S3 bucket
 	//    for the access logs.
 	//
-	//    * ipv6.deny_all_igw_traffic - Blocks internet gateway (IGW) access to
+	//    * ipv6.deny-all-igw-traffic - Blocks internet gateway (IGW) access to
 	//    the load balancer. It is set to false for internet-facing load balancers
 	//    and true for internal load balancers, preventing unintended access to
 	//    your internal load balancer through an internet gateway.
@@ -7265,11 +7270,6 @@ type LoadBalancerAttribute struct {
 	//    HTTP headers with invalid header fields are removed by the load balancer
 	//    (true) or routed to targets (false). The default is false.
 	//
-	//    * routing.http.preserve_host_header.enabled - Indicates whether the Application
-	//    Load Balancer should preserve the Host header in the HTTP request and
-	//    send it to the target without any change. The possible values are true
-	//    and false. The default is false.
-	//
 	//    * routing.http.x_amzn_tls_version_and_cipher_suite.enabled - Indicates
 	//    whether the two headers (x-amzn-tls-version and x-amzn-tls-cipher-suite),
 	//    which contain information about the negotiated TLS version and cipher
@@ -7284,18 +7284,6 @@ type LoadBalancerAttribute struct {
 	//    header should preserve the source port that the client used to connect
 	//    to the load balancer. The possible values are true and false. The default
 	//    is false.
-	//
-	//    * routing.http.xff_header_processing.mode - Enables you to modify, preserve,
-	//    or remove the X-Forwarded-For header in the HTTP request before the Application
-	//    Load Balancer sends the request to the target. The possible values are
-	//    append, preserve, and remove. The default is append. If the value is append,
-	//    the Application Load Balancer adds the client IP address (of the last
-	//    hop) to the X-Forwarded-For header in the HTTP request before it sends
-	//    it to targets. If the value is preserve the Application Load Balancer
-	//    preserves the X-Forwarded-For header in the HTTP request, and sends it
-	//    to targets without any change. If the value is remove, the Application
-	//    Load Balancer removes the X-Forwarded-For header in the HTTP request before
-	//    it sends it to targets.
 	//
 	//    * routing.http2.enabled - Indicates whether HTTP/2 is enabled. The possible
 	//    values are true and false. The default is true. Elastic Load Balancing
@@ -7911,6 +7899,8 @@ type ModifyTargetGroupInput struct {
 
 	// The approximate amount of time, in seconds, between health checks of an individual
 	// target. For TCP health checks, the supported values are 10 or 30 seconds.
+	//
+	// With Network Load Balancers, you can't modify this setting.
 	HealthCheckIntervalSeconds *int64 `min:"5" type:"integer"`
 
 	// [HTTP/HTTPS health checks] The destination for health checks on the targets.
@@ -7931,10 +7921,14 @@ type ModifyTargetGroupInput struct {
 	// is supported for health checks only if the protocol of the target group is
 	// TCP, TLS, UDP, or TCP_UDP. The GENEVE, TLS, UDP, and TCP_UDP protocols are
 	// not supported for health checks.
+	//
+	// With Network Load Balancers, you can't modify this setting.
 	HealthCheckProtocol *string `type:"string" enum:"ProtocolEnum"`
 
 	// [HTTP/HTTPS health checks] The amount of time, in seconds, during which no
 	// response means a failed health check.
+	//
+	// With Network Load Balancers, you can't modify this setting.
 	HealthCheckTimeoutSeconds *int64 `min:"2" type:"integer"`
 
 	// The number of consecutive health checks successes required before considering
@@ -7943,6 +7937,8 @@ type ModifyTargetGroupInput struct {
 
 	// [HTTP/HTTPS health checks] The HTTP or gRPC codes to use when checking for
 	// a successful response from a target.
+	//
+	// With Network Load Balancers, you can't modify this setting.
 	Matcher *Matcher `type:"structure"`
 
 	// The Amazon Resource Name (ARN) of the target group.
@@ -8228,15 +8224,15 @@ func (s *QueryStringKeyValuePair) SetValue(v string) *QueryStringKeyValuePair {
 //
 // You can reuse URI components using the following reserved keywords:
 //
-//   - #{protocol}
+//    * #{protocol}
 //
-//   - #{host}
+//    * #{host}
 //
-//   - #{port}
+//    * #{port}
 //
-//   - #{path} (the leading "/" is removed)
+//    * #{path} (the leading "/" is removed)
 //
-//   - #{query}
+//    * #{query}
 //
 // For example, you can change the path to "/new/#{path}", the hostname to "example.#{host}",
 // or the query to "#{query}&value=xyz".
@@ -8678,8 +8674,7 @@ func (s *Rule) SetRuleArn(v string) *Rule {
 // Each rule can optionally include up to one of each of the following conditions:
 // http-request-method, host-header, path-pattern, and source-ip. Each rule
 // can also optionally include one or more of each of the following conditions:
-// http-header and query-string. Note that the value for a condition cannot
-// be empty.
+// http-header and query-string.
 type RuleCondition struct {
 	_ struct{} `type:"structure"`
 
@@ -9851,16 +9846,15 @@ type TargetGroupAttribute struct {
 	//    value is 300 seconds. If the target is a Lambda function, this attribute
 	//    is not supported.
 	//
-	// The following attributes are supported by Application Load Balancers, Network
-	// Load Balancers, and Gateway Load Balancers:
+	// The following attributes are supported by both Application Load Balancers
+	// and Network Load Balancers:
 	//
-	//    * stickiness.enabled - Indicates whether target stickiness is enabled.
+	//    * stickiness.enabled - Indicates whether sticky sessions are enabled.
 	//    The value is true or false. The default is false.
 	//
-	//    * stickiness.type - Indicates the type of stickiness. The possible values
-	//    are: lb_cookie and app_cookie for Application Load Balancers source_ip
-	//    for Network Load Balancers source_ip_dest_ip and source_ip_dest_ip_proto
-	//    for Gateway Load Balancers
+	//    * stickiness.type - The type of sticky sessions. The possible values are
+	//    lb_cookie and app_cookie for Application Load Balancers or source_ip for
+	//    Network Load Balancers.
 	//
 	// The following attributes are supported only if the load balancer is an Application
 	// Load Balancer and the target is an instance or an IP address:

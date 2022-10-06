@@ -29,13 +29,14 @@ const opAddTags = "AddTags"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the AddTagsRequest method.
-//	req, resp := client.AddTagsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the AddTagsRequest method.
+//    req, resp := client.AddTagsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/AddTags
 func (c *ELB) AddTagsRequest(input *AddTagsInput) (req *request.Request, output *AddTagsOutput) {
@@ -74,16 +75,15 @@ func (c *ELB) AddTagsRequest(input *AddTagsInput) (req *request.Request, output 
 // API operation AddTags for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   The quota for the number of tags that can be assigned to a load balancer
+//   has been reached.
 //
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     The quota for the number of tags that can be assigned to a load balancer
-//     has been reached.
-//
-//   - ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
-//     A tag key was specified more than once.
+//   * ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
+//   A tag key was specified more than once.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/AddTags
 func (c *ELB) AddTags(input *AddTagsInput) (*AddTagsOutput, error) {
@@ -123,13 +123,14 @@ const opApplySecurityGroupsToLoadBalancer = "ApplySecurityGroupsToLoadBalancer"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ApplySecurityGroupsToLoadBalancerRequest method.
-//	req, resp := client.ApplySecurityGroupsToLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ApplySecurityGroupsToLoadBalancerRequest method.
+//    req, resp := client.ApplySecurityGroupsToLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/ApplySecurityGroupsToLoadBalancer
 func (c *ELB) ApplySecurityGroupsToLoadBalancerRequest(input *ApplySecurityGroupsToLoadBalancerInput) (req *request.Request, output *ApplySecurityGroupsToLoadBalancerOutput) {
@@ -165,15 +166,14 @@ func (c *ELB) ApplySecurityGroupsToLoadBalancerRequest(input *ApplySecurityGroup
 // API operation ApplySecurityGroupsToLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
-//
-//   - ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
-//     One or more of the specified security groups do not exist.
+//   * ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
+//   One or more of the specified security groups do not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/ApplySecurityGroupsToLoadBalancer
 func (c *ELB) ApplySecurityGroupsToLoadBalancer(input *ApplySecurityGroupsToLoadBalancerInput) (*ApplySecurityGroupsToLoadBalancerOutput, error) {
@@ -213,13 +213,14 @@ const opAttachLoadBalancerToSubnets = "AttachLoadBalancerToSubnets"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the AttachLoadBalancerToSubnetsRequest method.
-//	req, resp := client.AttachLoadBalancerToSubnetsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the AttachLoadBalancerToSubnetsRequest method.
+//    req, resp := client.AttachLoadBalancerToSubnetsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/AttachLoadBalancerToSubnets
 func (c *ELB) AttachLoadBalancerToSubnetsRequest(input *AttachLoadBalancerToSubnetsInput) (req *request.Request, output *AttachLoadBalancerToSubnetsOutput) {
@@ -256,18 +257,17 @@ func (c *ELB) AttachLoadBalancerToSubnetsRequest(input *AttachLoadBalancerToSubn
 // API operation AttachLoadBalancerToSubnets for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeSubnetNotFoundException "SubnetNotFound"
+//   One or more of the specified subnets do not exist.
 //
-//   - ErrCodeSubnetNotFoundException "SubnetNotFound"
-//     One or more of the specified subnets do not exist.
-//
-//   - ErrCodeInvalidSubnetException "InvalidSubnet"
-//     The specified VPC has no associated Internet gateway.
+//   * ErrCodeInvalidSubnetException "InvalidSubnet"
+//   The specified VPC has no associated Internet gateway.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/AttachLoadBalancerToSubnets
 func (c *ELB) AttachLoadBalancerToSubnets(input *AttachLoadBalancerToSubnetsInput) (*AttachLoadBalancerToSubnetsOutput, error) {
@@ -307,13 +307,14 @@ const opConfigureHealthCheck = "ConfigureHealthCheck"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ConfigureHealthCheckRequest method.
-//	req, resp := client.ConfigureHealthCheckRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ConfigureHealthCheckRequest method.
+//    req, resp := client.ConfigureHealthCheckRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/ConfigureHealthCheck
 func (c *ELB) ConfigureHealthCheckRequest(input *ConfigureHealthCheckInput) (req *request.Request, output *ConfigureHealthCheckOutput) {
@@ -349,8 +350,8 @@ func (c *ELB) ConfigureHealthCheckRequest(input *ConfigureHealthCheckInput) (req
 // API operation ConfigureHealthCheck for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/ConfigureHealthCheck
 func (c *ELB) ConfigureHealthCheck(input *ConfigureHealthCheckInput) (*ConfigureHealthCheckOutput, error) {
@@ -390,13 +391,14 @@ const opCreateAppCookieStickinessPolicy = "CreateAppCookieStickinessPolicy"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateAppCookieStickinessPolicyRequest method.
-//	req, resp := client.CreateAppCookieStickinessPolicyRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateAppCookieStickinessPolicyRequest method.
+//    req, resp := client.CreateAppCookieStickinessPolicyRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateAppCookieStickinessPolicy
 func (c *ELB) CreateAppCookieStickinessPolicyRequest(input *CreateAppCookieStickinessPolicyInput) (req *request.Request, output *CreateAppCookieStickinessPolicyOutput) {
@@ -442,18 +444,17 @@ func (c *ELB) CreateAppCookieStickinessPolicyRequest(input *CreateAppCookieStick
 // API operation CreateAppCookieStickinessPolicy for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeDuplicatePolicyNameException "DuplicatePolicyName"
+//   A policy with the specified name already exists for this load balancer.
 //
-//   - ErrCodeDuplicatePolicyNameException "DuplicatePolicyName"
-//     A policy with the specified name already exists for this load balancer.
+//   * ErrCodeTooManyPoliciesException "TooManyPolicies"
+//   The quota for the number of policies for this load balancer has been reached.
 //
-//   - ErrCodeTooManyPoliciesException "TooManyPolicies"
-//     The quota for the number of policies for this load balancer has been reached.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateAppCookieStickinessPolicy
 func (c *ELB) CreateAppCookieStickinessPolicy(input *CreateAppCookieStickinessPolicyInput) (*CreateAppCookieStickinessPolicyOutput, error) {
@@ -493,13 +494,14 @@ const opCreateLBCookieStickinessPolicy = "CreateLBCookieStickinessPolicy"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateLBCookieStickinessPolicyRequest method.
-//	req, resp := client.CreateLBCookieStickinessPolicyRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateLBCookieStickinessPolicyRequest method.
+//    req, resp := client.CreateLBCookieStickinessPolicyRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLBCookieStickinessPolicy
 func (c *ELB) CreateLBCookieStickinessPolicyRequest(input *CreateLBCookieStickinessPolicyInput) (req *request.Request, output *CreateLBCookieStickinessPolicyOutput) {
@@ -547,18 +549,17 @@ func (c *ELB) CreateLBCookieStickinessPolicyRequest(input *CreateLBCookieStickin
 // API operation CreateLBCookieStickinessPolicy for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeDuplicatePolicyNameException "DuplicatePolicyName"
+//   A policy with the specified name already exists for this load balancer.
 //
-//   - ErrCodeDuplicatePolicyNameException "DuplicatePolicyName"
-//     A policy with the specified name already exists for this load balancer.
+//   * ErrCodeTooManyPoliciesException "TooManyPolicies"
+//   The quota for the number of policies for this load balancer has been reached.
 //
-//   - ErrCodeTooManyPoliciesException "TooManyPolicies"
-//     The quota for the number of policies for this load balancer has been reached.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLBCookieStickinessPolicy
 func (c *ELB) CreateLBCookieStickinessPolicy(input *CreateLBCookieStickinessPolicyInput) (*CreateLBCookieStickinessPolicyOutput, error) {
@@ -598,13 +599,14 @@ const opCreateLoadBalancer = "CreateLoadBalancer"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateLoadBalancerRequest method.
-//	req, resp := client.CreateLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateLoadBalancerRequest method.
+//    req, resp := client.CreateLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLoadBalancer
 func (c *ELB) CreateLoadBalancerRequest(input *CreateLoadBalancerInput) (req *request.Request, output *CreateLoadBalancerOutput) {
@@ -647,47 +649,46 @@ func (c *ELB) CreateLoadBalancerRequest(input *CreateLoadBalancerInput) (req *re
 // API operation CreateLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeDuplicateAccessPointNameException "DuplicateLoadBalancerName"
+//   The specified load balancer name already exists for this account.
 //
-//   - ErrCodeDuplicateAccessPointNameException "DuplicateLoadBalancerName"
-//     The specified load balancer name already exists for this account.
+//   * ErrCodeTooManyAccessPointsException "TooManyLoadBalancers"
+//   The quota for the number of load balancers has been reached.
 //
-//   - ErrCodeTooManyAccessPointsException "TooManyLoadBalancers"
-//     The quota for the number of load balancers has been reached.
+//   * ErrCodeCertificateNotFoundException "CertificateNotFound"
+//   The specified ARN does not refer to a valid SSL certificate in AWS Identity
+//   and Access Management (IAM) or AWS Certificate Manager (ACM). Note that if
+//   you recently uploaded the certificate to IAM, this error might indicate that
+//   the certificate is not fully available yet.
 //
-//   - ErrCodeCertificateNotFoundException "CertificateNotFound"
-//     The specified ARN does not refer to a valid SSL certificate in AWS Identity
-//     and Access Management (IAM) or AWS Certificate Manager (ACM). Note that if
-//     you recently uploaded the certificate to IAM, this error might indicate that
-//     the certificate is not fully available yet.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeSubnetNotFoundException "SubnetNotFound"
+//   One or more of the specified subnets do not exist.
 //
-//   - ErrCodeSubnetNotFoundException "SubnetNotFound"
-//     One or more of the specified subnets do not exist.
+//   * ErrCodeInvalidSubnetException "InvalidSubnet"
+//   The specified VPC has no associated Internet gateway.
 //
-//   - ErrCodeInvalidSubnetException "InvalidSubnet"
-//     The specified VPC has no associated Internet gateway.
+//   * ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
+//   One or more of the specified security groups do not exist.
 //
-//   - ErrCodeInvalidSecurityGroupException "InvalidSecurityGroup"
-//     One or more of the specified security groups do not exist.
+//   * ErrCodeInvalidSchemeException "InvalidScheme"
+//   The specified value for the schema is not valid. You can only specify a scheme
+//   for load balancers in a VPC.
 //
-//   - ErrCodeInvalidSchemeException "InvalidScheme"
-//     The specified value for the schema is not valid. You can only specify a scheme
-//     for load balancers in a VPC.
+//   * ErrCodeTooManyTagsException "TooManyTags"
+//   The quota for the number of tags that can be assigned to a load balancer
+//   has been reached.
 //
-//   - ErrCodeTooManyTagsException "TooManyTags"
-//     The quota for the number of tags that can be assigned to a load balancer
-//     has been reached.
+//   * ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
+//   A tag key was specified more than once.
 //
-//   - ErrCodeDuplicateTagKeysException "DuplicateTagKeys"
-//     A tag key was specified more than once.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol or signature version is not supported.
 //
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol or signature version is not supported.
-//
-//   - ErrCodeOperationNotPermittedException "OperationNotPermitted"
-//     This operation is not allowed.
+//   * ErrCodeOperationNotPermittedException "OperationNotPermitted"
+//   This operation is not allowed.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLoadBalancer
 func (c *ELB) CreateLoadBalancer(input *CreateLoadBalancerInput) (*CreateLoadBalancerOutput, error) {
@@ -727,13 +728,14 @@ const opCreateLoadBalancerListeners = "CreateLoadBalancerListeners"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateLoadBalancerListenersRequest method.
-//	req, resp := client.CreateLoadBalancerListenersRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateLoadBalancerListenersRequest method.
+//    req, resp := client.CreateLoadBalancerListenersRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLoadBalancerListeners
 func (c *ELB) CreateLoadBalancerListenersRequest(input *CreateLoadBalancerListenersInput) (req *request.Request, output *CreateLoadBalancerListenersOutput) {
@@ -771,25 +773,24 @@ func (c *ELB) CreateLoadBalancerListenersRequest(input *CreateLoadBalancerListen
 // API operation CreateLoadBalancerListeners for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeDuplicateListenerException "DuplicateListener"
+//   A listener already exists for the specified load balancer name and port,
+//   but with a different instance port, protocol, or SSL certificate.
 //
-//   - ErrCodeDuplicateListenerException "DuplicateListener"
-//     A listener already exists for the specified load balancer name and port,
-//     but with a different instance port, protocol, or SSL certificate.
+//   * ErrCodeCertificateNotFoundException "CertificateNotFound"
+//   The specified ARN does not refer to a valid SSL certificate in AWS Identity
+//   and Access Management (IAM) or AWS Certificate Manager (ACM). Note that if
+//   you recently uploaded the certificate to IAM, this error might indicate that
+//   the certificate is not fully available yet.
 //
-//   - ErrCodeCertificateNotFoundException "CertificateNotFound"
-//     The specified ARN does not refer to a valid SSL certificate in AWS Identity
-//     and Access Management (IAM) or AWS Certificate Manager (ACM). Note that if
-//     you recently uploaded the certificate to IAM, this error might indicate that
-//     the certificate is not fully available yet.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
-//
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol or signature version is not supported.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol or signature version is not supported.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLoadBalancerListeners
 func (c *ELB) CreateLoadBalancerListeners(input *CreateLoadBalancerListenersInput) (*CreateLoadBalancerListenersOutput, error) {
@@ -829,13 +830,14 @@ const opCreateLoadBalancerPolicy = "CreateLoadBalancerPolicy"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the CreateLoadBalancerPolicyRequest method.
-//	req, resp := client.CreateLoadBalancerPolicyRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the CreateLoadBalancerPolicyRequest method.
+//    req, resp := client.CreateLoadBalancerPolicyRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLoadBalancerPolicy
 func (c *ELB) CreateLoadBalancerPolicyRequest(input *CreateLoadBalancerPolicyInput) (req *request.Request, output *CreateLoadBalancerPolicyOutput) {
@@ -871,21 +873,20 @@ func (c *ELB) CreateLoadBalancerPolicyRequest(input *CreateLoadBalancerPolicyInp
 // API operation CreateLoadBalancerPolicy for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodePolicyTypeNotFoundException "PolicyTypeNotFound"
+//   One or more of the specified policy types do not exist.
 //
-//   - ErrCodePolicyTypeNotFoundException "PolicyTypeNotFound"
-//     One or more of the specified policy types do not exist.
+//   * ErrCodeDuplicatePolicyNameException "DuplicatePolicyName"
+//   A policy with the specified name already exists for this load balancer.
 //
-//   - ErrCodeDuplicatePolicyNameException "DuplicatePolicyName"
-//     A policy with the specified name already exists for this load balancer.
+//   * ErrCodeTooManyPoliciesException "TooManyPolicies"
+//   The quota for the number of policies for this load balancer has been reached.
 //
-//   - ErrCodeTooManyPoliciesException "TooManyPolicies"
-//     The quota for the number of policies for this load balancer has been reached.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/CreateLoadBalancerPolicy
 func (c *ELB) CreateLoadBalancerPolicy(input *CreateLoadBalancerPolicyInput) (*CreateLoadBalancerPolicyOutput, error) {
@@ -925,13 +926,14 @@ const opDeleteLoadBalancer = "DeleteLoadBalancer"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteLoadBalancerRequest method.
-//	req, resp := client.DeleteLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteLoadBalancerRequest method.
+//    req, resp := client.DeleteLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeleteLoadBalancer
 func (c *ELB) DeleteLoadBalancerRequest(input *DeleteLoadBalancerInput) (req *request.Request, output *DeleteLoadBalancerOutput) {
@@ -1008,13 +1010,14 @@ const opDeleteLoadBalancerListeners = "DeleteLoadBalancerListeners"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteLoadBalancerListenersRequest method.
-//	req, resp := client.DeleteLoadBalancerListenersRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteLoadBalancerListenersRequest method.
+//    req, resp := client.DeleteLoadBalancerListenersRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeleteLoadBalancerListeners
 func (c *ELB) DeleteLoadBalancerListenersRequest(input *DeleteLoadBalancerListenersInput) (req *request.Request, output *DeleteLoadBalancerListenersOutput) {
@@ -1046,8 +1049,8 @@ func (c *ELB) DeleteLoadBalancerListenersRequest(input *DeleteLoadBalancerListen
 // API operation DeleteLoadBalancerListeners for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeleteLoadBalancerListeners
 func (c *ELB) DeleteLoadBalancerListeners(input *DeleteLoadBalancerListenersInput) (*DeleteLoadBalancerListenersOutput, error) {
@@ -1087,13 +1090,14 @@ const opDeleteLoadBalancerPolicy = "DeleteLoadBalancerPolicy"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeleteLoadBalancerPolicyRequest method.
-//	req, resp := client.DeleteLoadBalancerPolicyRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeleteLoadBalancerPolicyRequest method.
+//    req, resp := client.DeleteLoadBalancerPolicyRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeleteLoadBalancerPolicy
 func (c *ELB) DeleteLoadBalancerPolicyRequest(input *DeleteLoadBalancerPolicyInput) (req *request.Request, output *DeleteLoadBalancerPolicyOutput) {
@@ -1126,12 +1130,11 @@ func (c *ELB) DeleteLoadBalancerPolicyRequest(input *DeleteLoadBalancerPolicyInp
 // API operation DeleteLoadBalancerPolicy for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeleteLoadBalancerPolicy
 func (c *ELB) DeleteLoadBalancerPolicy(input *DeleteLoadBalancerPolicyInput) (*DeleteLoadBalancerPolicyOutput, error) {
@@ -1171,13 +1174,14 @@ const opDeregisterInstancesFromLoadBalancer = "DeregisterInstancesFromLoadBalanc
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DeregisterInstancesFromLoadBalancerRequest method.
-//	req, resp := client.DeregisterInstancesFromLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DeregisterInstancesFromLoadBalancerRequest method.
+//    req, resp := client.DeregisterInstancesFromLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeregisterInstancesFromLoadBalancer
 func (c *ELB) DeregisterInstancesFromLoadBalancerRequest(input *DeregisterInstancesFromLoadBalancerInput) (req *request.Request, output *DeregisterInstancesFromLoadBalancerOutput) {
@@ -1216,12 +1220,11 @@ func (c *ELB) DeregisterInstancesFromLoadBalancerRequest(input *DeregisterInstan
 // API operation DeregisterInstancesFromLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidEndPointException "InvalidInstance"
-//     The specified endpoint is not valid.
+//   * ErrCodeInvalidEndPointException "InvalidInstance"
+//   The specified endpoint is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DeregisterInstancesFromLoadBalancer
 func (c *ELB) DeregisterInstancesFromLoadBalancer(input *DeregisterInstancesFromLoadBalancerInput) (*DeregisterInstancesFromLoadBalancerOutput, error) {
@@ -1261,13 +1264,14 @@ const opDescribeAccountLimits = "DescribeAccountLimits"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeAccountLimitsRequest method.
-//	req, resp := client.DescribeAccountLimitsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeAccountLimitsRequest method.
+//    req, resp := client.DescribeAccountLimitsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeAccountLimits
 func (c *ELB) DescribeAccountLimitsRequest(input *DescribeAccountLimitsInput) (req *request.Request, output *DescribeAccountLimitsOutput) {
@@ -1338,13 +1342,14 @@ const opDescribeInstanceHealth = "DescribeInstanceHealth"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeInstanceHealthRequest method.
-//	req, resp := client.DescribeInstanceHealthRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeInstanceHealthRequest method.
+//    req, resp := client.DescribeInstanceHealthRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeInstanceHealth
 func (c *ELB) DescribeInstanceHealthRequest(input *DescribeInstanceHealthInput) (req *request.Request, output *DescribeInstanceHealthOutput) {
@@ -1380,12 +1385,11 @@ func (c *ELB) DescribeInstanceHealthRequest(input *DescribeInstanceHealthInput) 
 // API operation DescribeInstanceHealth for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidEndPointException "InvalidInstance"
-//     The specified endpoint is not valid.
+//   * ErrCodeInvalidEndPointException "InvalidInstance"
+//   The specified endpoint is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeInstanceHealth
 func (c *ELB) DescribeInstanceHealth(input *DescribeInstanceHealthInput) (*DescribeInstanceHealthOutput, error) {
@@ -1425,13 +1429,14 @@ const opDescribeLoadBalancerAttributes = "DescribeLoadBalancerAttributes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeLoadBalancerAttributesRequest method.
-//	req, resp := client.DescribeLoadBalancerAttributesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeLoadBalancerAttributesRequest method.
+//    req, resp := client.DescribeLoadBalancerAttributesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancerAttributes
 func (c *ELB) DescribeLoadBalancerAttributesRequest(input *DescribeLoadBalancerAttributesInput) (req *request.Request, output *DescribeLoadBalancerAttributesOutput) {
@@ -1462,12 +1467,11 @@ func (c *ELB) DescribeLoadBalancerAttributesRequest(input *DescribeLoadBalancerA
 // API operation DescribeLoadBalancerAttributes for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeLoadBalancerAttributeNotFoundException "LoadBalancerAttributeNotFound"
-//     The specified load balancer attribute does not exist.
+//   * ErrCodeLoadBalancerAttributeNotFoundException "LoadBalancerAttributeNotFound"
+//   The specified load balancer attribute does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancerAttributes
 func (c *ELB) DescribeLoadBalancerAttributes(input *DescribeLoadBalancerAttributesInput) (*DescribeLoadBalancerAttributesOutput, error) {
@@ -1507,13 +1511,14 @@ const opDescribeLoadBalancerPolicies = "DescribeLoadBalancerPolicies"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeLoadBalancerPoliciesRequest method.
-//	req, resp := client.DescribeLoadBalancerPoliciesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeLoadBalancerPoliciesRequest method.
+//    req, resp := client.DescribeLoadBalancerPoliciesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancerPolicies
 func (c *ELB) DescribeLoadBalancerPoliciesRequest(input *DescribeLoadBalancerPoliciesInput) (req *request.Request, output *DescribeLoadBalancerPoliciesOutput) {
@@ -1551,12 +1556,11 @@ func (c *ELB) DescribeLoadBalancerPoliciesRequest(input *DescribeLoadBalancerPol
 // API operation DescribeLoadBalancerPolicies for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodePolicyNotFoundException "PolicyNotFound"
-//     One or more of the specified policies do not exist.
+//   * ErrCodePolicyNotFoundException "PolicyNotFound"
+//   One or more of the specified policies do not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancerPolicies
 func (c *ELB) DescribeLoadBalancerPolicies(input *DescribeLoadBalancerPoliciesInput) (*DescribeLoadBalancerPoliciesOutput, error) {
@@ -1596,13 +1600,14 @@ const opDescribeLoadBalancerPolicyTypes = "DescribeLoadBalancerPolicyTypes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeLoadBalancerPolicyTypesRequest method.
-//	req, resp := client.DescribeLoadBalancerPolicyTypesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeLoadBalancerPolicyTypesRequest method.
+//    req, resp := client.DescribeLoadBalancerPolicyTypesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancerPolicyTypes
 func (c *ELB) DescribeLoadBalancerPolicyTypesRequest(input *DescribeLoadBalancerPolicyTypesInput) (req *request.Request, output *DescribeLoadBalancerPolicyTypesOutput) {
@@ -1644,8 +1649,8 @@ func (c *ELB) DescribeLoadBalancerPolicyTypesRequest(input *DescribeLoadBalancer
 // API operation DescribeLoadBalancerPolicyTypes for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodePolicyTypeNotFoundException "PolicyTypeNotFound"
-//     One or more of the specified policy types do not exist.
+//   * ErrCodePolicyTypeNotFoundException "PolicyTypeNotFound"
+//   One or more of the specified policy types do not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancerPolicyTypes
 func (c *ELB) DescribeLoadBalancerPolicyTypes(input *DescribeLoadBalancerPolicyTypesInput) (*DescribeLoadBalancerPolicyTypesOutput, error) {
@@ -1685,13 +1690,14 @@ const opDescribeLoadBalancers = "DescribeLoadBalancers"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeLoadBalancersRequest method.
-//	req, resp := client.DescribeLoadBalancersRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeLoadBalancersRequest method.
+//    req, resp := client.DescribeLoadBalancersRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancers
 func (c *ELB) DescribeLoadBalancersRequest(input *DescribeLoadBalancersInput) (req *request.Request, output *DescribeLoadBalancersOutput) {
@@ -1729,13 +1735,12 @@ func (c *ELB) DescribeLoadBalancersRequest(input *DescribeLoadBalancersInput) (r
 // API operation DescribeLoadBalancers for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeDependencyThrottleException "DependencyThrottle"
-//     A request made by Elastic Load Balancing to another service exceeds the maximum
-//     request rate permitted for your account.
+//   * ErrCodeDependencyThrottleException "DependencyThrottle"
+//   A request made by Elastic Load Balancing to another service exceeds the maximum
+//   request rate permitted for your account.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeLoadBalancers
 func (c *ELB) DescribeLoadBalancers(input *DescribeLoadBalancersInput) (*DescribeLoadBalancersOutput, error) {
@@ -1767,14 +1772,15 @@ func (c *ELB) DescribeLoadBalancersWithContext(ctx aws.Context, input *DescribeL
 //
 // Note: This operation can generate multiple requests to a service.
 //
-//	// Example iterating over at most 3 pages of a DescribeLoadBalancers operation.
-//	pageNum := 0
-//	err := client.DescribeLoadBalancersPages(params,
-//	    func(page *elb.DescribeLoadBalancersOutput, lastPage bool) bool {
-//	        pageNum++
-//	        fmt.Println(page)
-//	        return pageNum <= 3
-//	    })
+//    // Example iterating over at most 3 pages of a DescribeLoadBalancers operation.
+//    pageNum := 0
+//    err := client.DescribeLoadBalancersPages(params,
+//        func(page *elb.DescribeLoadBalancersOutput, lastPage bool) bool {
+//            pageNum++
+//            fmt.Println(page)
+//            return pageNum <= 3
+//        })
+//
 func (c *ELB) DescribeLoadBalancersPages(input *DescribeLoadBalancersInput, fn func(*DescribeLoadBalancersOutput, bool) bool) error {
 	return c.DescribeLoadBalancersPagesWithContext(aws.BackgroundContext(), input, fn)
 }
@@ -1826,13 +1832,14 @@ const opDescribeTags = "DescribeTags"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DescribeTagsRequest method.
-//	req, resp := client.DescribeTagsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DescribeTagsRequest method.
+//    req, resp := client.DescribeTagsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeTags
 func (c *ELB) DescribeTagsRequest(input *DescribeTagsInput) (req *request.Request, output *DescribeTagsOutput) {
@@ -1863,8 +1870,8 @@ func (c *ELB) DescribeTagsRequest(input *DescribeTagsInput) (req *request.Reques
 // API operation DescribeTags for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DescribeTags
 func (c *ELB) DescribeTags(input *DescribeTagsInput) (*DescribeTagsOutput, error) {
@@ -1904,13 +1911,14 @@ const opDetachLoadBalancerFromSubnets = "DetachLoadBalancerFromSubnets"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DetachLoadBalancerFromSubnetsRequest method.
-//	req, resp := client.DetachLoadBalancerFromSubnetsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DetachLoadBalancerFromSubnetsRequest method.
+//    req, resp := client.DetachLoadBalancerFromSubnetsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DetachLoadBalancerFromSubnets
 func (c *ELB) DetachLoadBalancerFromSubnetsRequest(input *DetachLoadBalancerFromSubnetsInput) (req *request.Request, output *DetachLoadBalancerFromSubnetsOutput) {
@@ -1946,12 +1954,11 @@ func (c *ELB) DetachLoadBalancerFromSubnetsRequest(input *DetachLoadBalancerFrom
 // API operation DetachLoadBalancerFromSubnets for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DetachLoadBalancerFromSubnets
 func (c *ELB) DetachLoadBalancerFromSubnets(input *DetachLoadBalancerFromSubnetsInput) (*DetachLoadBalancerFromSubnetsOutput, error) {
@@ -1991,13 +1998,14 @@ const opDisableAvailabilityZonesForLoadBalancer = "DisableAvailabilityZonesForLo
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the DisableAvailabilityZonesForLoadBalancerRequest method.
-//	req, resp := client.DisableAvailabilityZonesForLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the DisableAvailabilityZonesForLoadBalancerRequest method.
+//    req, resp := client.DisableAvailabilityZonesForLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DisableAvailabilityZonesForLoadBalancer
 func (c *ELB) DisableAvailabilityZonesForLoadBalancerRequest(input *DisableAvailabilityZonesForLoadBalancerInput) (req *request.Request, output *DisableAvailabilityZonesForLoadBalancerOutput) {
@@ -2040,12 +2048,11 @@ func (c *ELB) DisableAvailabilityZonesForLoadBalancerRequest(input *DisableAvail
 // API operation DisableAvailabilityZonesForLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/DisableAvailabilityZonesForLoadBalancer
 func (c *ELB) DisableAvailabilityZonesForLoadBalancer(input *DisableAvailabilityZonesForLoadBalancerInput) (*DisableAvailabilityZonesForLoadBalancerOutput, error) {
@@ -2085,13 +2092,14 @@ const opEnableAvailabilityZonesForLoadBalancer = "EnableAvailabilityZonesForLoad
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the EnableAvailabilityZonesForLoadBalancerRequest method.
-//	req, resp := client.EnableAvailabilityZonesForLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the EnableAvailabilityZonesForLoadBalancerRequest method.
+//    req, resp := client.EnableAvailabilityZonesForLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/EnableAvailabilityZonesForLoadBalancer
 func (c *ELB) EnableAvailabilityZonesForLoadBalancerRequest(input *EnableAvailabilityZonesForLoadBalancerInput) (req *request.Request, output *EnableAvailabilityZonesForLoadBalancerOutput) {
@@ -2130,8 +2138,8 @@ func (c *ELB) EnableAvailabilityZonesForLoadBalancerRequest(input *EnableAvailab
 // API operation EnableAvailabilityZonesForLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/EnableAvailabilityZonesForLoadBalancer
 func (c *ELB) EnableAvailabilityZonesForLoadBalancer(input *EnableAvailabilityZonesForLoadBalancerInput) (*EnableAvailabilityZonesForLoadBalancerOutput, error) {
@@ -2171,13 +2179,14 @@ const opModifyLoadBalancerAttributes = "ModifyLoadBalancerAttributes"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the ModifyLoadBalancerAttributesRequest method.
-//	req, resp := client.ModifyLoadBalancerAttributesRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the ModifyLoadBalancerAttributesRequest method.
+//    req, resp := client.ModifyLoadBalancerAttributesRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/ModifyLoadBalancerAttributes
 func (c *ELB) ModifyLoadBalancerAttributesRequest(input *ModifyLoadBalancerAttributesInput) (req *request.Request, output *ModifyLoadBalancerAttributesOutput) {
@@ -2207,13 +2216,13 @@ func (c *ELB) ModifyLoadBalancerAttributesRequest(input *ModifyLoadBalancerAttri
 //
 // For more information, see the following in the Classic Load Balancers Guide:
 //
-//   - Cross-Zone Load Balancing (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/enable-disable-crosszone-lb.html)
+//    * Cross-Zone Load Balancing (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/enable-disable-crosszone-lb.html)
 //
-//   - Connection Draining (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/config-conn-drain.html)
+//    * Connection Draining (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/config-conn-drain.html)
 //
-//   - Access Logs (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/access-log-collection.html)
+//    * Access Logs (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/access-log-collection.html)
 //
-//   - Idle Connection Timeout (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/config-idle-timeout.html)
+//    * Idle Connection Timeout (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/config-idle-timeout.html)
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -2223,15 +2232,14 @@ func (c *ELB) ModifyLoadBalancerAttributesRequest(input *ModifyLoadBalancerAttri
 // API operation ModifyLoadBalancerAttributes for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeLoadBalancerAttributeNotFoundException "LoadBalancerAttributeNotFound"
+//   The specified load balancer attribute does not exist.
 //
-//   - ErrCodeLoadBalancerAttributeNotFoundException "LoadBalancerAttributeNotFound"
-//     The specified load balancer attribute does not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/ModifyLoadBalancerAttributes
 func (c *ELB) ModifyLoadBalancerAttributes(input *ModifyLoadBalancerAttributesInput) (*ModifyLoadBalancerAttributesOutput, error) {
@@ -2271,13 +2279,14 @@ const opRegisterInstancesWithLoadBalancer = "RegisterInstancesWithLoadBalancer"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the RegisterInstancesWithLoadBalancerRequest method.
-//	req, resp := client.RegisterInstancesWithLoadBalancerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the RegisterInstancesWithLoadBalancerRequest method.
+//    req, resp := client.RegisterInstancesWithLoadBalancerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/RegisterInstancesWithLoadBalancer
 func (c *ELB) RegisterInstancesWithLoadBalancerRequest(input *RegisterInstancesWithLoadBalancerInput) (req *request.Request, output *RegisterInstancesWithLoadBalancerOutput) {
@@ -2330,12 +2339,11 @@ func (c *ELB) RegisterInstancesWithLoadBalancerRequest(input *RegisterInstancesW
 // API operation RegisterInstancesWithLoadBalancer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
-//
-//   - ErrCodeInvalidEndPointException "InvalidInstance"
-//     The specified endpoint is not valid.
+//   * ErrCodeInvalidEndPointException "InvalidInstance"
+//   The specified endpoint is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/RegisterInstancesWithLoadBalancer
 func (c *ELB) RegisterInstancesWithLoadBalancer(input *RegisterInstancesWithLoadBalancerInput) (*RegisterInstancesWithLoadBalancerOutput, error) {
@@ -2375,13 +2383,14 @@ const opRemoveTags = "RemoveTags"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the RemoveTagsRequest method.
-//	req, resp := client.RemoveTagsRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the RemoveTagsRequest method.
+//    req, resp := client.RemoveTagsRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/RemoveTags
 func (c *ELB) RemoveTagsRequest(input *RemoveTagsInput) (req *request.Request, output *RemoveTagsOutput) {
@@ -2413,8 +2422,8 @@ func (c *ELB) RemoveTagsRequest(input *RemoveTagsInput) (req *request.Request, o
 // API operation RemoveTags for usage and error information.
 //
 // Returned Error Codes:
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/RemoveTags
 func (c *ELB) RemoveTags(input *RemoveTagsInput) (*RemoveTagsOutput, error) {
@@ -2454,13 +2463,14 @@ const opSetLoadBalancerListenerSSLCertificate = "SetLoadBalancerListenerSSLCerti
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetLoadBalancerListenerSSLCertificateRequest method.
-//	req, resp := client.SetLoadBalancerListenerSSLCertificateRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetLoadBalancerListenerSSLCertificateRequest method.
+//    req, resp := client.SetLoadBalancerListenerSSLCertificateRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/SetLoadBalancerListenerSSLCertificate
 func (c *ELB) SetLoadBalancerListenerSSLCertificateRequest(input *SetLoadBalancerListenerSSLCertificateInput) (req *request.Request, output *SetLoadBalancerListenerSSLCertificateOutput) {
@@ -2498,24 +2508,23 @@ func (c *ELB) SetLoadBalancerListenerSSLCertificateRequest(input *SetLoadBalance
 // API operation SetLoadBalancerListenerSSLCertificate for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeCertificateNotFoundException "CertificateNotFound"
+//   The specified ARN does not refer to a valid SSL certificate in AWS Identity
+//   and Access Management (IAM) or AWS Certificate Manager (ACM). Note that if
+//   you recently uploaded the certificate to IAM, this error might indicate that
+//   the certificate is not fully available yet.
 //
-//   - ErrCodeCertificateNotFoundException "CertificateNotFound"
-//     The specified ARN does not refer to a valid SSL certificate in AWS Identity
-//     and Access Management (IAM) or AWS Certificate Manager (ACM). Note that if
-//     you recently uploaded the certificate to IAM, this error might indicate that
-//     the certificate is not fully available yet.
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The load balancer does not have a listener configured at the specified port.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The load balancer does not have a listener configured at the specified port.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
-//
-//   - ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
-//     The specified protocol or signature version is not supported.
+//   * ErrCodeUnsupportedProtocolException "UnsupportedProtocol"
+//   The specified protocol or signature version is not supported.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/SetLoadBalancerListenerSSLCertificate
 func (c *ELB) SetLoadBalancerListenerSSLCertificate(input *SetLoadBalancerListenerSSLCertificateInput) (*SetLoadBalancerListenerSSLCertificateOutput, error) {
@@ -2555,13 +2564,14 @@ const opSetLoadBalancerPoliciesForBackendServer = "SetLoadBalancerPoliciesForBac
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetLoadBalancerPoliciesForBackendServerRequest method.
-//	req, resp := client.SetLoadBalancerPoliciesForBackendServerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetLoadBalancerPoliciesForBackendServerRequest method.
+//    req, resp := client.SetLoadBalancerPoliciesForBackendServerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/SetLoadBalancerPoliciesForBackendServer
 func (c *ELB) SetLoadBalancerPoliciesForBackendServerRequest(input *SetLoadBalancerPoliciesForBackendServerInput) (req *request.Request, output *SetLoadBalancerPoliciesForBackendServerOutput) {
@@ -2608,15 +2618,14 @@ func (c *ELB) SetLoadBalancerPoliciesForBackendServerRequest(input *SetLoadBalan
 // API operation SetLoadBalancerPoliciesForBackendServer for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodePolicyNotFoundException "PolicyNotFound"
+//   One or more of the specified policies do not exist.
 //
-//   - ErrCodePolicyNotFoundException "PolicyNotFound"
-//     One or more of the specified policies do not exist.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/SetLoadBalancerPoliciesForBackendServer
 func (c *ELB) SetLoadBalancerPoliciesForBackendServer(input *SetLoadBalancerPoliciesForBackendServerInput) (*SetLoadBalancerPoliciesForBackendServerOutput, error) {
@@ -2656,13 +2665,14 @@ const opSetLoadBalancerPoliciesOfListener = "SetLoadBalancerPoliciesOfListener"
 // This method is useful when you want to inject custom logic or configuration
 // into the SDK's request lifecycle. Such as custom headers, or retry logic.
 //
-//	// Example sending a request using the SetLoadBalancerPoliciesOfListenerRequest method.
-//	req, resp := client.SetLoadBalancerPoliciesOfListenerRequest(params)
 //
-//	err := req.Send()
-//	if err == nil { // resp is now filled
-//	    fmt.Println(resp)
-//	}
+//    // Example sending a request using the SetLoadBalancerPoliciesOfListenerRequest method.
+//    req, resp := client.SetLoadBalancerPoliciesOfListenerRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/SetLoadBalancerPoliciesOfListener
 func (c *ELB) SetLoadBalancerPoliciesOfListenerRequest(input *SetLoadBalancerPoliciesOfListenerInput) (req *request.Request, output *SetLoadBalancerPoliciesOfListenerOutput) {
@@ -2703,18 +2713,17 @@ func (c *ELB) SetLoadBalancerPoliciesOfListenerRequest(input *SetLoadBalancerPol
 // API operation SetLoadBalancerPoliciesOfListener for usage and error information.
 //
 // Returned Error Codes:
+//   * ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
+//   The specified load balancer does not exist.
 //
-//   - ErrCodeAccessPointNotFoundException "LoadBalancerNotFound"
-//     The specified load balancer does not exist.
+//   * ErrCodePolicyNotFoundException "PolicyNotFound"
+//   One or more of the specified policies do not exist.
 //
-//   - ErrCodePolicyNotFoundException "PolicyNotFound"
-//     One or more of the specified policies do not exist.
+//   * ErrCodeListenerNotFoundException "ListenerNotFound"
+//   The load balancer does not have a listener configured at the specified port.
 //
-//   - ErrCodeListenerNotFoundException "ListenerNotFound"
-//     The load balancer does not have a listener configured at the specified port.
-//
-//   - ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
-//     The requested configuration change is not valid.
+//   * ErrCodeInvalidConfigurationRequestException "InvalidConfigurationRequest"
+//   The requested configuration change is not valid.
 //
 // See also, https://docs.aws.amazon.com/goto/WebAPI/elasticloadbalancing-2012-06-01/SetLoadBalancerPoliciesOfListener
 func (c *ELB) SetLoadBalancerPoliciesOfListener(input *SetLoadBalancerPoliciesOfListenerInput) (*SetLoadBalancerPoliciesOfListenerOutput, error) {
