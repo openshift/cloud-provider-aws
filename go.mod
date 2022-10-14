@@ -7,7 +7,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.8
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.7.2
+	github.com/stretchr/testify v1.8.0
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
 	gopkg.in/gcfg.v1 v1.2.3
 	k8s.io/api v0.25.0
@@ -69,7 +69,7 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
-	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/stretchr/objx v0.4.0 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.4 // indirect
@@ -109,7 +109,11 @@ require (
 	k8s.io/component-helpers v0.25.0 // indirect
 	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
 	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
-	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.32 // indirect
+	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.33 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
+
+// https://github.com/kubernetes/kubernetes/issues/112793
+// Remove after k8s.io/cloud-provider v0.25.3 will be released, updated upstream and rebased.
+replace k8s.io/cloud-provider v0.25.0 => github.com/openshift/kubernetes-cloud-provider v0.0.0-20221007081959-e07817829a38
