@@ -4523,6 +4523,19 @@ func v2toStatus(lb *elbv2.LoadBalancer) *v1.LoadBalancerStatus {
 		aws.StringValue(lb.State.Code) == elbv2.LoadBalancerStateEnumProvisioning) {
 		var ingress v1.LoadBalancerIngress
 		ingress.Hostname = aws.StringValue(lb.DNSName)
+		// TEST CODE: Manually resolve the IP Address of the Loadbalance DNS Name
+		// Attempting to solve https://issues.redhat.com/browse/OCPBUGS-9026
+		if err := wait.PollImmediate(10*time.Second, 5*time.Minute, func() (bool, error) {
+			addrs, err := net.LookupIP(ingress.Hostname)
+			if err != nil {
+				klog.Infof("waiting for loadbalancer domain %s to resolve...", ingress.Hostname)
+				return false, nil
+			}
+			ingress.IP = addrs[0].String()
+			return true, nil
+		}); err != nil {
+			klog.Fatalf("loadbalancer domain %s was unable to resolve:", ingress.Hostname)
+		}
 		status.Ingress = []v1.LoadBalancerIngress{ingress}
 	}
 
