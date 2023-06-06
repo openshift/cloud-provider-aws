@@ -116,6 +116,10 @@ type EC2API interface {
 	AssignPrivateIpAddressesWithContext(aws.Context, *ec2.AssignPrivateIpAddressesInput, ...request.Option) (*ec2.AssignPrivateIpAddressesOutput, error)
 	AssignPrivateIpAddressesRequest(*ec2.AssignPrivateIpAddressesInput) (*request.Request, *ec2.AssignPrivateIpAddressesOutput)
 
+	AssignPrivateNatGatewayAddress(*ec2.AssignPrivateNatGatewayAddressInput) (*ec2.AssignPrivateNatGatewayAddressOutput, error)
+	AssignPrivateNatGatewayAddressWithContext(aws.Context, *ec2.AssignPrivateNatGatewayAddressInput, ...request.Option) (*ec2.AssignPrivateNatGatewayAddressOutput, error)
+	AssignPrivateNatGatewayAddressRequest(*ec2.AssignPrivateNatGatewayAddressInput) (*request.Request, *ec2.AssignPrivateNatGatewayAddressOutput)
+
 	AssociateAddress(*ec2.AssociateAddressInput) (*ec2.AssociateAddressOutput, error)
 	AssociateAddressWithContext(aws.Context, *ec2.AssociateAddressInput, ...request.Option) (*ec2.AssociateAddressOutput, error)
 	AssociateAddressRequest(*ec2.AssociateAddressInput) (*request.Request, *ec2.AssociateAddressOutput)
@@ -139,6 +143,14 @@ type EC2API interface {
 	AssociateInstanceEventWindow(*ec2.AssociateInstanceEventWindowInput) (*ec2.AssociateInstanceEventWindowOutput, error)
 	AssociateInstanceEventWindowWithContext(aws.Context, *ec2.AssociateInstanceEventWindowInput, ...request.Option) (*ec2.AssociateInstanceEventWindowOutput, error)
 	AssociateInstanceEventWindowRequest(*ec2.AssociateInstanceEventWindowInput) (*request.Request, *ec2.AssociateInstanceEventWindowOutput)
+
+	AssociateIpamResourceDiscovery(*ec2.AssociateIpamResourceDiscoveryInput) (*ec2.AssociateIpamResourceDiscoveryOutput, error)
+	AssociateIpamResourceDiscoveryWithContext(aws.Context, *ec2.AssociateIpamResourceDiscoveryInput, ...request.Option) (*ec2.AssociateIpamResourceDiscoveryOutput, error)
+	AssociateIpamResourceDiscoveryRequest(*ec2.AssociateIpamResourceDiscoveryInput) (*request.Request, *ec2.AssociateIpamResourceDiscoveryOutput)
+
+	AssociateNatGatewayAddress(*ec2.AssociateNatGatewayAddressInput) (*ec2.AssociateNatGatewayAddressOutput, error)
+	AssociateNatGatewayAddressWithContext(aws.Context, *ec2.AssociateNatGatewayAddressInput, ...request.Option) (*ec2.AssociateNatGatewayAddressOutput, error)
+	AssociateNatGatewayAddressRequest(*ec2.AssociateNatGatewayAddressInput) (*request.Request, *ec2.AssociateNatGatewayAddressOutput)
 
 	AssociateRouteTable(*ec2.AssociateRouteTableInput) (*ec2.AssociateRouteTableOutput, error)
 	AssociateRouteTableWithContext(aws.Context, *ec2.AssociateRouteTableInput, ...request.Option) (*ec2.AssociateRouteTableOutput, error)
@@ -347,6 +359,10 @@ type EC2API interface {
 	CreateIpamPool(*ec2.CreateIpamPoolInput) (*ec2.CreateIpamPoolOutput, error)
 	CreateIpamPoolWithContext(aws.Context, *ec2.CreateIpamPoolInput, ...request.Option) (*ec2.CreateIpamPoolOutput, error)
 	CreateIpamPoolRequest(*ec2.CreateIpamPoolInput) (*request.Request, *ec2.CreateIpamPoolOutput)
+
+	CreateIpamResourceDiscovery(*ec2.CreateIpamResourceDiscoveryInput) (*ec2.CreateIpamResourceDiscoveryOutput, error)
+	CreateIpamResourceDiscoveryWithContext(aws.Context, *ec2.CreateIpamResourceDiscoveryInput, ...request.Option) (*ec2.CreateIpamResourceDiscoveryOutput, error)
+	CreateIpamResourceDiscoveryRequest(*ec2.CreateIpamResourceDiscoveryInput) (*request.Request, *ec2.CreateIpamResourceDiscoveryOutput)
 
 	CreateIpamScope(*ec2.CreateIpamScopeInput) (*ec2.CreateIpamScopeOutput, error)
 	CreateIpamScopeWithContext(aws.Context, *ec2.CreateIpamScopeInput, ...request.Option) (*ec2.CreateIpamScopeOutput, error)
@@ -643,6 +659,10 @@ type EC2API interface {
 	DeleteIpamPool(*ec2.DeleteIpamPoolInput) (*ec2.DeleteIpamPoolOutput, error)
 	DeleteIpamPoolWithContext(aws.Context, *ec2.DeleteIpamPoolInput, ...request.Option) (*ec2.DeleteIpamPoolOutput, error)
 	DeleteIpamPoolRequest(*ec2.DeleteIpamPoolInput) (*request.Request, *ec2.DeleteIpamPoolOutput)
+
+	DeleteIpamResourceDiscovery(*ec2.DeleteIpamResourceDiscoveryInput) (*ec2.DeleteIpamResourceDiscoveryOutput, error)
+	DeleteIpamResourceDiscoveryWithContext(aws.Context, *ec2.DeleteIpamResourceDiscoveryInput, ...request.Option) (*ec2.DeleteIpamResourceDiscoveryOutput, error)
+	DeleteIpamResourceDiscoveryRequest(*ec2.DeleteIpamResourceDiscoveryInput) (*request.Request, *ec2.DeleteIpamResourceDiscoveryOutput)
 
 	DeleteIpamScope(*ec2.DeleteIpamScopeInput) (*ec2.DeleteIpamScopeOutput, error)
 	DeleteIpamScopeWithContext(aws.Context, *ec2.DeleteIpamScopeInput, ...request.Option) (*ec2.DeleteIpamScopeOutput, error)
@@ -1146,6 +1166,9 @@ type EC2API interface {
 	DescribeImagesWithContext(aws.Context, *ec2.DescribeImagesInput, ...request.Option) (*ec2.DescribeImagesOutput, error)
 	DescribeImagesRequest(*ec2.DescribeImagesInput) (*request.Request, *ec2.DescribeImagesOutput)
 
+	DescribeImagesPages(*ec2.DescribeImagesInput, func(*ec2.DescribeImagesOutput, bool) bool) error
+	DescribeImagesPagesWithContext(aws.Context, *ec2.DescribeImagesInput, func(*ec2.DescribeImagesOutput, bool) bool, ...request.Option) error
+
 	DescribeImportImageTasks(*ec2.DescribeImportImageTasksInput) (*ec2.DescribeImportImageTasksOutput, error)
 	DescribeImportImageTasksWithContext(aws.Context, *ec2.DescribeImportImageTasksInput, ...request.Option) (*ec2.DescribeImportImageTasksOutput, error)
 	DescribeImportImageTasksRequest(*ec2.DescribeImportImageTasksInput) (*request.Request, *ec2.DescribeImportImageTasksOutput)
@@ -1223,6 +1246,20 @@ type EC2API interface {
 
 	DescribeIpamPoolsPages(*ec2.DescribeIpamPoolsInput, func(*ec2.DescribeIpamPoolsOutput, bool) bool) error
 	DescribeIpamPoolsPagesWithContext(aws.Context, *ec2.DescribeIpamPoolsInput, func(*ec2.DescribeIpamPoolsOutput, bool) bool, ...request.Option) error
+
+	DescribeIpamResourceDiscoveries(*ec2.DescribeIpamResourceDiscoveriesInput) (*ec2.DescribeIpamResourceDiscoveriesOutput, error)
+	DescribeIpamResourceDiscoveriesWithContext(aws.Context, *ec2.DescribeIpamResourceDiscoveriesInput, ...request.Option) (*ec2.DescribeIpamResourceDiscoveriesOutput, error)
+	DescribeIpamResourceDiscoveriesRequest(*ec2.DescribeIpamResourceDiscoveriesInput) (*request.Request, *ec2.DescribeIpamResourceDiscoveriesOutput)
+
+	DescribeIpamResourceDiscoveriesPages(*ec2.DescribeIpamResourceDiscoveriesInput, func(*ec2.DescribeIpamResourceDiscoveriesOutput, bool) bool) error
+	DescribeIpamResourceDiscoveriesPagesWithContext(aws.Context, *ec2.DescribeIpamResourceDiscoveriesInput, func(*ec2.DescribeIpamResourceDiscoveriesOutput, bool) bool, ...request.Option) error
+
+	DescribeIpamResourceDiscoveryAssociations(*ec2.DescribeIpamResourceDiscoveryAssociationsInput) (*ec2.DescribeIpamResourceDiscoveryAssociationsOutput, error)
+	DescribeIpamResourceDiscoveryAssociationsWithContext(aws.Context, *ec2.DescribeIpamResourceDiscoveryAssociationsInput, ...request.Option) (*ec2.DescribeIpamResourceDiscoveryAssociationsOutput, error)
+	DescribeIpamResourceDiscoveryAssociationsRequest(*ec2.DescribeIpamResourceDiscoveryAssociationsInput) (*request.Request, *ec2.DescribeIpamResourceDiscoveryAssociationsOutput)
+
+	DescribeIpamResourceDiscoveryAssociationsPages(*ec2.DescribeIpamResourceDiscoveryAssociationsInput, func(*ec2.DescribeIpamResourceDiscoveryAssociationsOutput, bool) bool) error
+	DescribeIpamResourceDiscoveryAssociationsPagesWithContext(aws.Context, *ec2.DescribeIpamResourceDiscoveryAssociationsInput, func(*ec2.DescribeIpamResourceDiscoveryAssociationsOutput, bool) bool, ...request.Option) error
 
 	DescribeIpamScopes(*ec2.DescribeIpamScopesInput) (*ec2.DescribeIpamScopesOutput, error)
 	DescribeIpamScopesWithContext(aws.Context, *ec2.DescribeIpamScopesInput, ...request.Option) (*ec2.DescribeIpamScopesOutput, error)
@@ -1881,6 +1918,14 @@ type EC2API interface {
 	DisassociateInstanceEventWindowWithContext(aws.Context, *ec2.DisassociateInstanceEventWindowInput, ...request.Option) (*ec2.DisassociateInstanceEventWindowOutput, error)
 	DisassociateInstanceEventWindowRequest(*ec2.DisassociateInstanceEventWindowInput) (*request.Request, *ec2.DisassociateInstanceEventWindowOutput)
 
+	DisassociateIpamResourceDiscovery(*ec2.DisassociateIpamResourceDiscoveryInput) (*ec2.DisassociateIpamResourceDiscoveryOutput, error)
+	DisassociateIpamResourceDiscoveryWithContext(aws.Context, *ec2.DisassociateIpamResourceDiscoveryInput, ...request.Option) (*ec2.DisassociateIpamResourceDiscoveryOutput, error)
+	DisassociateIpamResourceDiscoveryRequest(*ec2.DisassociateIpamResourceDiscoveryInput) (*request.Request, *ec2.DisassociateIpamResourceDiscoveryOutput)
+
+	DisassociateNatGatewayAddress(*ec2.DisassociateNatGatewayAddressInput) (*ec2.DisassociateNatGatewayAddressOutput, error)
+	DisassociateNatGatewayAddressWithContext(aws.Context, *ec2.DisassociateNatGatewayAddressInput, ...request.Option) (*ec2.DisassociateNatGatewayAddressOutput, error)
+	DisassociateNatGatewayAddressRequest(*ec2.DisassociateNatGatewayAddressInput) (*request.Request, *ec2.DisassociateNatGatewayAddressOutput)
+
 	DisassociateRouteTable(*ec2.DisassociateRouteTableInput) (*ec2.DisassociateRouteTableOutput, error)
 	DisassociateRouteTableWithContext(aws.Context, *ec2.DisassociateRouteTableInput, ...request.Option) (*ec2.DisassociateRouteTableOutput, error)
 	DisassociateRouteTableRequest(*ec2.DisassociateRouteTableInput) (*request.Request, *ec2.DisassociateRouteTableOutput)
@@ -2060,6 +2105,20 @@ type EC2API interface {
 	GetIpamAddressHistoryPages(*ec2.GetIpamAddressHistoryInput, func(*ec2.GetIpamAddressHistoryOutput, bool) bool) error
 	GetIpamAddressHistoryPagesWithContext(aws.Context, *ec2.GetIpamAddressHistoryInput, func(*ec2.GetIpamAddressHistoryOutput, bool) bool, ...request.Option) error
 
+	GetIpamDiscoveredAccounts(*ec2.GetIpamDiscoveredAccountsInput) (*ec2.GetIpamDiscoveredAccountsOutput, error)
+	GetIpamDiscoveredAccountsWithContext(aws.Context, *ec2.GetIpamDiscoveredAccountsInput, ...request.Option) (*ec2.GetIpamDiscoveredAccountsOutput, error)
+	GetIpamDiscoveredAccountsRequest(*ec2.GetIpamDiscoveredAccountsInput) (*request.Request, *ec2.GetIpamDiscoveredAccountsOutput)
+
+	GetIpamDiscoveredAccountsPages(*ec2.GetIpamDiscoveredAccountsInput, func(*ec2.GetIpamDiscoveredAccountsOutput, bool) bool) error
+	GetIpamDiscoveredAccountsPagesWithContext(aws.Context, *ec2.GetIpamDiscoveredAccountsInput, func(*ec2.GetIpamDiscoveredAccountsOutput, bool) bool, ...request.Option) error
+
+	GetIpamDiscoveredResourceCidrs(*ec2.GetIpamDiscoveredResourceCidrsInput) (*ec2.GetIpamDiscoveredResourceCidrsOutput, error)
+	GetIpamDiscoveredResourceCidrsWithContext(aws.Context, *ec2.GetIpamDiscoveredResourceCidrsInput, ...request.Option) (*ec2.GetIpamDiscoveredResourceCidrsOutput, error)
+	GetIpamDiscoveredResourceCidrsRequest(*ec2.GetIpamDiscoveredResourceCidrsInput) (*request.Request, *ec2.GetIpamDiscoveredResourceCidrsOutput)
+
+	GetIpamDiscoveredResourceCidrsPages(*ec2.GetIpamDiscoveredResourceCidrsInput, func(*ec2.GetIpamDiscoveredResourceCidrsOutput, bool) bool) error
+	GetIpamDiscoveredResourceCidrsPagesWithContext(aws.Context, *ec2.GetIpamDiscoveredResourceCidrsInput, func(*ec2.GetIpamDiscoveredResourceCidrsOutput, bool) bool, ...request.Option) error
+
 	GetIpamPoolAllocations(*ec2.GetIpamPoolAllocationsInput) (*ec2.GetIpamPoolAllocationsOutput, error)
 	GetIpamPoolAllocationsWithContext(aws.Context, *ec2.GetIpamPoolAllocationsInput, ...request.Option) (*ec2.GetIpamPoolAllocationsOutput, error)
 	GetIpamPoolAllocationsRequest(*ec2.GetIpamPoolAllocationsInput) (*request.Request, *ec2.GetIpamPoolAllocationsOutput)
@@ -2195,6 +2254,10 @@ type EC2API interface {
 	GetVpnConnectionDeviceTypesPages(*ec2.GetVpnConnectionDeviceTypesInput, func(*ec2.GetVpnConnectionDeviceTypesOutput, bool) bool) error
 	GetVpnConnectionDeviceTypesPagesWithContext(aws.Context, *ec2.GetVpnConnectionDeviceTypesInput, func(*ec2.GetVpnConnectionDeviceTypesOutput, bool) bool, ...request.Option) error
 
+	GetVpnTunnelReplacementStatus(*ec2.GetVpnTunnelReplacementStatusInput) (*ec2.GetVpnTunnelReplacementStatusOutput, error)
+	GetVpnTunnelReplacementStatusWithContext(aws.Context, *ec2.GetVpnTunnelReplacementStatusInput, ...request.Option) (*ec2.GetVpnTunnelReplacementStatusOutput, error)
+	GetVpnTunnelReplacementStatusRequest(*ec2.GetVpnTunnelReplacementStatusInput) (*request.Request, *ec2.GetVpnTunnelReplacementStatusOutput)
+
 	ImportClientVpnClientCertificateRevocationList(*ec2.ImportClientVpnClientCertificateRevocationListInput) (*ec2.ImportClientVpnClientCertificateRevocationListOutput, error)
 	ImportClientVpnClientCertificateRevocationListWithContext(aws.Context, *ec2.ImportClientVpnClientCertificateRevocationListInput, ...request.Option) (*ec2.ImportClientVpnClientCertificateRevocationListOutput, error)
 	ImportClientVpnClientCertificateRevocationListRequest(*ec2.ImportClientVpnClientCertificateRevocationListInput) (*request.Request, *ec2.ImportClientVpnClientCertificateRevocationListOutput)
@@ -2328,6 +2391,10 @@ type EC2API interface {
 	ModifyIpamResourceCidr(*ec2.ModifyIpamResourceCidrInput) (*ec2.ModifyIpamResourceCidrOutput, error)
 	ModifyIpamResourceCidrWithContext(aws.Context, *ec2.ModifyIpamResourceCidrInput, ...request.Option) (*ec2.ModifyIpamResourceCidrOutput, error)
 	ModifyIpamResourceCidrRequest(*ec2.ModifyIpamResourceCidrInput) (*request.Request, *ec2.ModifyIpamResourceCidrOutput)
+
+	ModifyIpamResourceDiscovery(*ec2.ModifyIpamResourceDiscoveryInput) (*ec2.ModifyIpamResourceDiscoveryOutput, error)
+	ModifyIpamResourceDiscoveryWithContext(aws.Context, *ec2.ModifyIpamResourceDiscoveryInput, ...request.Option) (*ec2.ModifyIpamResourceDiscoveryOutput, error)
+	ModifyIpamResourceDiscoveryRequest(*ec2.ModifyIpamResourceDiscoveryInput) (*request.Request, *ec2.ModifyIpamResourceDiscoveryOutput)
 
 	ModifyIpamScope(*ec2.ModifyIpamScopeInput) (*ec2.ModifyIpamScopeOutput, error)
 	ModifyIpamScopeWithContext(aws.Context, *ec2.ModifyIpamScopeInput, ...request.Option) (*ec2.ModifyIpamScopeOutput, error)
@@ -2597,6 +2664,10 @@ type EC2API interface {
 	ReplaceTransitGatewayRouteWithContext(aws.Context, *ec2.ReplaceTransitGatewayRouteInput, ...request.Option) (*ec2.ReplaceTransitGatewayRouteOutput, error)
 	ReplaceTransitGatewayRouteRequest(*ec2.ReplaceTransitGatewayRouteInput) (*request.Request, *ec2.ReplaceTransitGatewayRouteOutput)
 
+	ReplaceVpnTunnel(*ec2.ReplaceVpnTunnelInput) (*ec2.ReplaceVpnTunnelOutput, error)
+	ReplaceVpnTunnelWithContext(aws.Context, *ec2.ReplaceVpnTunnelInput, ...request.Option) (*ec2.ReplaceVpnTunnelOutput, error)
+	ReplaceVpnTunnelRequest(*ec2.ReplaceVpnTunnelInput) (*request.Request, *ec2.ReplaceVpnTunnelOutput)
+
 	ReportInstanceStatus(*ec2.ReportInstanceStatusInput) (*ec2.ReportInstanceStatusOutput, error)
 	ReportInstanceStatusWithContext(aws.Context, *ec2.ReportInstanceStatusInput, ...request.Option) (*ec2.ReportInstanceStatusOutput, error)
 	ReportInstanceStatusRequest(*ec2.ReportInstanceStatusInput) (*request.Request, *ec2.ReportInstanceStatusOutput)
@@ -2735,6 +2806,10 @@ type EC2API interface {
 	UnassignPrivateIpAddressesWithContext(aws.Context, *ec2.UnassignPrivateIpAddressesInput, ...request.Option) (*ec2.UnassignPrivateIpAddressesOutput, error)
 	UnassignPrivateIpAddressesRequest(*ec2.UnassignPrivateIpAddressesInput) (*request.Request, *ec2.UnassignPrivateIpAddressesOutput)
 
+	UnassignPrivateNatGatewayAddress(*ec2.UnassignPrivateNatGatewayAddressInput) (*ec2.UnassignPrivateNatGatewayAddressOutput, error)
+	UnassignPrivateNatGatewayAddressWithContext(aws.Context, *ec2.UnassignPrivateNatGatewayAddressInput, ...request.Option) (*ec2.UnassignPrivateNatGatewayAddressOutput, error)
+	UnassignPrivateNatGatewayAddressRequest(*ec2.UnassignPrivateNatGatewayAddressInput) (*request.Request, *ec2.UnassignPrivateNatGatewayAddressOutput)
+
 	UnmonitorInstances(*ec2.UnmonitorInstancesInput) (*ec2.UnmonitorInstancesOutput, error)
 	UnmonitorInstancesWithContext(aws.Context, *ec2.UnmonitorInstancesInput, ...request.Option) (*ec2.UnmonitorInstancesOutput, error)
 	UnmonitorInstancesRequest(*ec2.UnmonitorInstancesInput) (*request.Request, *ec2.UnmonitorInstancesOutput)
@@ -2816,6 +2891,9 @@ type EC2API interface {
 
 	WaitUntilSnapshotCompleted(*ec2.DescribeSnapshotsInput) error
 	WaitUntilSnapshotCompletedWithContext(aws.Context, *ec2.DescribeSnapshotsInput, ...request.WaiterOption) error
+
+	WaitUntilSnapshotImported(*ec2.DescribeImportSnapshotTasksInput) error
+	WaitUntilSnapshotImportedWithContext(aws.Context, *ec2.DescribeImportSnapshotTasksInput, ...request.WaiterOption) error
 
 	WaitUntilSpotInstanceRequestFulfilled(*ec2.DescribeSpotInstanceRequestsInput) error
 	WaitUntilSpotInstanceRequestFulfilledWithContext(aws.Context, *ec2.DescribeSpotInstanceRequestsInput, ...request.WaiterOption) error
