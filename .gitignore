@@ -9,4 +9,3 @@ site/
 .vscode/
 e2e.test
 .idea/
-**/*.swp
