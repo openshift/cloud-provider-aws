@@ -20,8 +20,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/instrument"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
+	"go.opentelemetry.io/otel/metric/unit"
 	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -45,7 +47,7 @@ type config struct {
 	MeterProvider  metric.MeterProvider
 
 	meter             metric.Meter
-	rpcServerDuration instrument.Int64Histogram
+	rpcServerDuration syncint64.Histogram
 }
 
 // Option applies an option value for a config.
@@ -70,7 +72,7 @@ func newConfig(opts []Option) *config {
 		metric.WithSchemaURL(semconv.SchemaURL),
 	)
 	var err error
-	if c.rpcServerDuration, err = c.meter.Int64Histogram("rpc.server.duration", instrument.WithUnit("ms")); err != nil {
+	if c.rpcServerDuration, err = c.meter.SyncInt64().Histogram("rpc.server.duration", instrument.WithUnit(unit.Milliseconds)); err != nil {
 		otel.Handle(err)
 	}
 

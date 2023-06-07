@@ -2,4 +2,4 @@ resources:
 - ../../base
 
 patches:
-- path: cluster.yaml
+- cluster.yaml

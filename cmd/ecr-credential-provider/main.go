@@ -30,17 +30,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecr"
-	"github.com/aws/aws-sdk-go/service/ecrpublic"
-	"github.com/spf13/cobra"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/component-base/logs"
 	"k8s.io/klog/v2"
-	v1 "k8s.io/kubelet/pkg/apis/credentialprovider/v1"
+	"k8s.io/kubelet/pkg/apis/credentialprovider/v1alpha1"
 )
-
-const ecrPublicRegion string = "us-east-1"
-const ecrPublicURL string = "public.ecr.aws"
 
 var ecrPattern = regexp.MustCompile(`^(\d{12})\.dkr\.ecr(\-fips)?\.([a-zA-Z0-9][a-zA-Z0-9-_]*)\.(amazonaws\.com(\.cn)?|sc2s\.sgov\.gov|c2s\.ic\.gov)$`)
 
@@ -49,17 +43,11 @@ type ECR interface {
 	GetAuthorizationToken(input *ecr.GetAuthorizationTokenInput) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
-// ECRPublic abstracts the calls we make to aws-sdk for testing purposes
-type ECRPublic interface {
-	GetAuthorizationToken(input *ecrpublic.GetAuthorizationTokenInput) (*ecrpublic.GetAuthorizationTokenOutput, error)
-}
-
 type ecrPlugin struct {
-	ecr       ECR
-	ecrPublic ECRPublic
+	ecr ECR
 }
 
-func defaultECRProvider(region string) (*ecr.ECR, error) {
+func defaultECRProvider(region string, registryID string) (*ecr.ECR, error) {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		Config:            aws.Config{Region: aws.String(region)},
 		SharedConfigState: session.SharedConfigEnable,
@@ -71,66 +59,14 @@ func defaultECRProvider(region string) (*ecr.ECR, error) {
 	return ecr.New(sess), nil
 }
 
-func publicECRProvider() (*ecrpublic.ECRPublic, error) {
-	// ECR public registries are only in one region and only accessible from regions
-	// in the "aws" partition.
-	sess, err := session.NewSessionWithOptions(session.Options{
-		Config:            aws.Config{Region: aws.String(ecrPublicRegion)},
-		SharedConfigState: session.SharedConfigEnable,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return ecrpublic.New(sess), nil
-}
-
-type credsData struct {
-	registry  string
-	authToken *string
-	expiresAt *time.Time
-}
-
-func (e *ecrPlugin) getPublicCredsData() (*credsData, error) {
-	klog.Infof("Getting creds for public registry")
-	var err error
-
-	if e.ecrPublic == nil {
-		e.ecrPublic, err = publicECRProvider()
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	output, err := e.ecrPublic.GetAuthorizationToken(&ecrpublic.GetAuthorizationTokenInput{})
-	if err != nil {
-		return nil, err
-	}
-
-	if output == nil {
-		return nil, errors.New("response output from ECR was nil")
-	}
-
-	if output.AuthorizationData == nil {
-		return nil, errors.New("authorization data was empty")
-	}
-
-	return &credsData{
-		registry:  ecrPublicURL,
-		authToken: output.AuthorizationData.AuthorizationToken,
-		expiresAt: output.AuthorizationData.ExpiresAt,
-	}, nil
-}
-
-func (e *ecrPlugin) getPrivateCredsData(image string) (*credsData, error) {
-	klog.Infof("Getting creds for private registry %s", image)
+func (e *ecrPlugin) GetCredentials(ctx context.Context, image string, args []string) (*v1alpha1.CredentialProviderResponse, error) {
 	registryID, region, registry, err := parseRepoURL(image)
 	if err != nil {
 		return nil, err
 	}
 
 	if e.ecr == nil {
-		e.ecr, err = defaultECRProvider(region)
+		e.ecr, err = defaultECRProvider(region, registryID)
 		if err != nil {
 			return nil, err
 		}
@@ -151,32 +87,12 @@ func (e *ecrPlugin) getPrivateCredsData(image string) (*credsData, error) {
 		return nil, errors.New("authorization data was empty")
 	}
 
-	return &credsData{
-		registry:  registry,
-		authToken: output.AuthorizationData[0].AuthorizationToken,
-		expiresAt: output.AuthorizationData[0].ExpiresAt,
-	}, nil
-}
-
-func (e *ecrPlugin) GetCredentials(ctx context.Context, image string, args []string) (*v1.CredentialProviderResponse, error) {
-	var creds *credsData
-	var err error
-
-	if strings.Contains(image, ecrPublicURL) {
-		creds, err = e.getPublicCredsData()
-	} else {
-		creds, err = e.getPrivateCredsData(image)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	if creds.authToken == nil {
+	data := output.AuthorizationData[0]
+	if data.AuthorizationToken == nil {
 		return nil, errors.New("authorization token in response was nil")
 	}
 
-	decodedToken, err := base64.StdEncoding.DecodeString(aws.StringValue(creds.authToken))
+	decodedToken, err := base64.StdEncoding.DecodeString(aws.StringValue(data.AuthorizationToken))
 	if err != nil {
 		return nil, err
 	}
@@ -186,13 +102,13 @@ func (e *ecrPlugin) GetCredentials(ctx context.Context, image string, args []str
 		return nil, errors.New("error parsing username and password from authorization token")
 	}
 
-	cacheDuration := getCacheDuration(creds.expiresAt)
+	cacheDuration := getCacheDuration(data.ExpiresAt)
 
-	return &v1.CredentialProviderResponse{
-		CacheKeyType:  v1.RegistryPluginCacheKeyType,
+	return &v1alpha1.CredentialProviderResponse{
+		CacheKeyType:  v1alpha1.RegistryPluginCacheKeyType,
 		CacheDuration: cacheDuration,
-		Auth: map[string]v1.AuthConfig{
-			creds.registry: {
+		Auth: map[string]v1alpha1.AuthConfig{
+			registry: {
 				Username: parts[0],
 				Password: parts[1],
 			},
@@ -240,28 +156,9 @@ func parseRepoURL(image string) (string, string, string, error) {
 }
 
 func main() {
-	logs.InitLogs()
-	defer logs.FlushLogs()
-
-	if err := newCredentialProviderCommand().Execute(); err != nil {
+	p := NewCredentialProvider(&ecrPlugin{})
+	if err := p.Run(context.TODO()); err != nil {
+		klog.Errorf("Error running credential provider plugin: %v", err)
 		os.Exit(1)
 	}
-}
-
-var gitVersion string
-
-func newCredentialProviderCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "ecr-credential-provider",
-		Short:   "ECR credential provider for kubelet",
-		Version: gitVersion,
-		Run: func(cmd *cobra.Command, args []string) {
-			p := NewCredentialProvider(&ecrPlugin{})
-			if err := p.Run(context.TODO()); err != nil {
-				klog.Errorf("Error running credential provider plugin: %v", err)
-				os.Exit(1)
-			}
-		},
-	}
-	return cmd
 }
