@@ -1,7 +1,7 @@
-// Code generated from /Users/tswadell/go/src/github.com/google/cel-go/parser/gen/CEL.g4 by ANTLR 4.12.0. DO NOT EDIT.
+// Code generated from /Users/tswadell/go/src/github.com/google/cel-go/parser/gen/CEL.g4 by ANTLR 4.10.1. DO NOT EDIT.
 
 package gen // CEL
-import "github.com/antlr/antlr4/runtime/Go/antlr/v4"
+import "github.com/antlr/antlr4/runtime/Go/antlr"
 
 // CELListener is a complete listener for a parse tree produced by CELParser.
 type CELListener interface {
@@ -67,9 +67,6 @@ type CELListener interface {
 	// EnterExprList is called when entering the exprList production.
 	EnterExprList(c *ExprListContext)
 
-	// EnterListInit is called when entering the listInit production.
-	EnterListInit(c *ListInitContext)
-
 	// EnterFieldInitializerList is called when entering the fieldInitializerList production.
 	EnterFieldInitializerList(c *FieldInitializerListContext)
 
@@ -79,8 +76,8 @@ type CELListener interface {
 	// EnterMapInitializerList is called when entering the mapInitializerList production.
 	EnterMapInitializerList(c *MapInitializerListContext)
 
-	// EnterOptExpr is called when entering the optExpr production.
-	EnterOptExpr(c *OptExprContext)
+	// EnterOptKey is called when entering the optKey production.
+	EnterOptKey(c *OptKeyContext)
 
 	// EnterInt is called when entering the Int production.
 	EnterInt(c *IntContext)
@@ -166,9 +163,6 @@ type CELListener interface {
 	// ExitExprList is called when exiting the exprList production.
 	ExitExprList(c *ExprListContext)
 
-	// ExitListInit is called when exiting the listInit production.
-	ExitListInit(c *ListInitContext)
-
 	// ExitFieldInitializerList is called when exiting the fieldInitializerList production.
 	ExitFieldInitializerList(c *FieldInitializerListContext)
 
@@ -178,8 +172,8 @@ type CELListener interface {
 	// ExitMapInitializerList is called when exiting the mapInitializerList production.
 	ExitMapInitializerList(c *MapInitializerListContext)
 
-	// ExitOptExpr is called when exiting the optExpr production.
-	ExitOptExpr(c *OptExprContext)
+	// ExitOptKey is called when exiting the optKey production.
+	ExitOptKey(c *OptKeyContext)
 
 	// ExitInt is called when exiting the Int production.
 	ExitInt(c *IntContext)

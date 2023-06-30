@@ -69,8 +69,6 @@ func CostObserver(tracker *CostTracker) EvalObserver {
 			tracker.stack.drop(t.rhs.ID(), t.lhs.ID())
 		case *evalFold:
 			tracker.stack.drop(t.iterRange.ID())
-		case *evalTestOnly:
-			tracker.cost += common.SelectAndIdentCost
 		case Qualifier:
 			tracker.cost++
 		case InterpretableCall:
@@ -124,7 +122,7 @@ func (c CostTracker) costCall(call InterpretableCall, argValues []ref.Val, resul
 	// if user has their own implementation of ActualCostEstimator, make sure to cover the mapping between overloadId and cost calculation
 	switch call.OverloadID() {
 	// O(n) functions
-	case overloads.StartsWithString, overloads.EndsWithString, overloads.StringToBytes, overloads.BytesToString, overloads.ExtQuoteString, overloads.ExtFormatString:
+	case overloads.StartsWithString, overloads.EndsWithString, overloads.StringToBytes, overloads.BytesToString:
 		cost += uint64(math.Ceil(float64(c.actualSize(argValues[0])) * common.StringTraversalCostFactor))
 	case overloads.InList:
 		// If a list is composed entirely of constant values this is O(1), but we don't account for that here.

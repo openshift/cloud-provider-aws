@@ -20,7 +20,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
@@ -33,23 +32,31 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc/internal"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type messageType attribute.KeyValue
 
 // Event adds an event of the messageType to the span associated with the
-// passed context with a message id.
-func (m messageType) Event(ctx context.Context, id int, _ interface{}) {
+// passed context with id and size (if message is a proto message).
+func (m messageType) Event(ctx context.Context, id int, message interface{}) {
 	span := trace.SpanFromContext(ctx)
 	if !span.IsRecording() {
 		return
 	}
-	span.AddEvent("message", trace.WithAttributes(
-		attribute.KeyValue(m),
-		RPCMessageIDKey.Int(id),
-	))
+	if p, ok := message.(proto.Message); ok {
+		span.AddEvent("message", trace.WithAttributes(
+			attribute.KeyValue(m),
+			RPCMessageIDKey.Int(id),
+			RPCMessageUncompressedSizeKey.Int(proto.Size(p)),
+		))
+	} else {
+		span.AddEvent("message", trace.WithAttributes(
+			attribute.KeyValue(m),
+			RPCMessageIDKey.Int(id),
+		))
+	}
 }
 
 var (
@@ -457,7 +464,7 @@ func spanInfo(fullMethod, peerAddress string) (string, []attribute.KeyValue) {
 
 // peerAttr returns attributes about the peer address.
 func peerAttr(addr string) []attribute.KeyValue {
-	host, p, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return []attribute.KeyValue(nil)
 	}
@@ -465,25 +472,11 @@ func peerAttr(addr string) []attribute.KeyValue {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	port, err := strconv.Atoi(p)
-	if err != nil {
-		return []attribute.KeyValue(nil)
-	}
 
-	var attr []attribute.KeyValue
-	if ip := net.ParseIP(host); ip != nil {
-		attr = []attribute.KeyValue{
-			semconv.NetSockPeerAddr(host),
-			semconv.NetSockPeerPort(port),
-		}
-	} else {
-		attr = []attribute.KeyValue{
-			semconv.NetPeerName(host),
-			semconv.NetPeerPort(port),
-		}
+	return []attribute.KeyValue{
+		semconv.NetPeerIPKey.String(host),
+		semconv.NetPeerPortKey.String(port),
 	}
-
-	return attr
 }
 
 // peerFromCtx returns a peer address from a context, if one exists.

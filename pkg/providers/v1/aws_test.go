@@ -145,6 +145,79 @@ func (m *MockedFakeELB) expectConfigureHealthCheck(loadBalancerName *string, exp
 	}
 }
 
+func TestReadAWSCloudConfig(t *testing.T) {
+	tests := []struct {
+		name string
+
+		reader io.Reader
+		aws    Services
+
+		expectError bool
+		zone        string
+	}{
+		{
+			"No config reader",
+			nil, nil,
+			true, "",
+		},
+		{
+			"Empty config, no metadata",
+			strings.NewReader(""), nil,
+			true, "",
+		},
+		{
+			"No zone in config, no metadata",
+			strings.NewReader("[global]\n"), nil,
+			true, "",
+		},
+		{
+			"Zone in config, no metadata",
+			strings.NewReader("[global]\nzone = eu-west-1a"), nil,
+			false, "eu-west-1a",
+		},
+		{
+			"No zone in config, metadata does not have zone",
+			strings.NewReader("[global]\n"), newMockedFakeAWSServices(TestClusterID).WithAz(""),
+			true, "",
+		},
+		{
+			"No zone in config, metadata has zone",
+			strings.NewReader("[global]\n"), newMockedFakeAWSServices(TestClusterID),
+			false, "us-east-1a",
+		},
+		{
+			"Zone in config should take precedence over metadata",
+			strings.NewReader("[global]\nzone = eu-west-1a"), newMockedFakeAWSServices(TestClusterID),
+			false, "eu-west-1a",
+		},
+	}
+
+	for _, test := range tests {
+		t.Logf("Running test case %s", test.name)
+		var metadata EC2Metadata
+		if test.aws != nil {
+			metadata, _ = test.aws.Metadata()
+		}
+		cfg, err := readAWSCloudConfig(test.reader)
+		if err == nil {
+			err = updateConfigZone(cfg, metadata)
+		}
+		if test.expectError {
+			if err == nil {
+				t.Errorf("Should error for case %s (cfg=%v)", test.name, cfg)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("Should succeed for case: %s", test.name)
+			}
+			if cfg.Global.Zone != test.zone {
+				t.Errorf("Incorrect zone value (%s vs %s) for case: %s",
+					cfg.Global.Zone, test.zone, test.name)
+			}
+		}
+	}
+}
+
 func TestReadAWSCloudConfigNodeIPFamilies(t *testing.T) {
 	tests := []struct {
 		name string
@@ -481,6 +554,11 @@ func TestNewAWSCloud(t *testing.T) {
 		region      string
 	}{
 		{
+			"No config reader",
+			nil, newMockedFakeAWSServices(TestClusterID).WithAz(""),
+			true, "",
+		},
+		{
 			"Config specifies valid zone",
 			strings.NewReader("[global]\nzone = eu-west-1a"), newMockedFakeAWSServices(TestClusterID),
 			false, "eu-west-1",
@@ -490,6 +568,12 @@ func TestNewAWSCloud(t *testing.T) {
 			strings.NewReader("[global]\n"),
 			newMockedFakeAWSServices(TestClusterID),
 			false, "us-east-1",
+		},
+		{
+			"No zone in config or metadata",
+			strings.NewReader("[global]\n"),
+			newMockedFakeAWSServices(TestClusterID).WithAz(""),
+			true, "",
 		},
 	}
 
@@ -541,8 +625,8 @@ func mockInstancesResp(selfInstance *ec2.Instance, instances []*ec2.Instance) (*
 	return awsCloud, awsServices
 }
 
-func mockZone(region, availabilityZone string) *Cloud {
-	awsServices := newMockedFakeAWSServices(TestClusterID).WithAz(availabilityZone).WithRegion(region)
+func mockAvailabilityZone(availabilityZone string) *Cloud {
+	awsServices := newMockedFakeAWSServices(TestClusterID).WithAz(availabilityZone)
 	awsCloud, err := newAWSCloud(CloudConfig{}, awsServices)
 	if err != nil {
 		panic(err)
@@ -560,14 +644,14 @@ func testHasNodeAddress(t *testing.T, addrs []v1.NodeAddress, addressType v1.Nod
 	t.Errorf("Did not find expected address: %s:%s in %v", addressType, address, addrs)
 }
 
-func makeInstance(instanceID string, privateIP, publicIP, privateDNSName, publicDNSName string, ipv6s []string, setNetInterface bool) ec2.Instance {
+func makeInstance(num int, privateIP, publicIP, privateDNSName, publicDNSName string, ipv6s []string, setNetInterface bool) ec2.Instance {
 	var tag ec2.Tag
 	tag.Key = aws.String(TagNameKubernetesClusterLegacy)
 	tag.Value = aws.String(TestClusterID)
 	tags := []*ec2.Tag{&tag}
 
 	instance := ec2.Instance{
-		InstanceId:       &instanceID,
+		InstanceId:       aws.String(fmt.Sprintf("i-%d", num)),
 		PrivateDnsName:   aws.String(privateDNSName),
 		PrivateIpAddress: aws.String(privateIP),
 		PublicDnsName:    aws.String(publicDNSName),
@@ -602,206 +686,128 @@ func makeInstance(instanceID string, privateIP, publicIP, privateDNSName, public
 }
 
 func TestNodeAddressesByProviderID(t *testing.T) {
-	for _, tc := range []struct {
-		Name            string
-		InstanceID      string
-		PrivateIP       string
-		PublicIP        string
-		PrivateDNSName  string
-		PublicDNSName   string
-		Ipv6s           []string
-		SetNetInterface bool
-		NodeName        string
-		Ipv6Only        bool
+	// Note instance0 and instance1 have the same name
+	// (we test that this produces an error)
+	instance0 := makeInstance(0, "192.168.0.1", "1.2.3.4", "instance-same.ec2.internal", "instance-same.ec2.external", nil, true)
+	instance1 := makeInstance(1, "192.168.0.2", "", "instance-same.ec2.internal", "", nil, false)
+	instance2 := makeInstance(2, "192.168.0.1", "1.2.3.4", "instance-other.ec2.internal", "", nil, false)
+	instance3 := makeInstance(3, "192.168.0.3", "", "instance-ipv6.ec2.internal", "", []string{"2a05:d014:aa7:911:fc7e:1600:fc4d:ab2", "2a05:d014:aa7:911:9f44:e737:1aa0:6489"}, true)
+	instances := []*ec2.Instance{&instance0, &instance1, &instance2, &instance3}
 
-		ExpectedNumAddresses int
-	}{
-		{
-			Name:                 "ipv4 w/public IP",
-			InstanceID:           "i-00000000000000000",
-			PrivateIP:            "192.168.0.1",
-			PublicIP:             "1.2.3.4",
-			PrivateDNSName:       "instance-same.ec2.internal",
-			PublicDNSName:        "instance-same.ec2.external",
-			SetNetInterface:      true,
-			ExpectedNumAddresses: 5,
-		},
-		{
-			Name:                 "ipv4 w/private IP only",
-			InstanceID:           "i-00000000000000001",
-			PrivateIP:            "192.168.0.2",
-			PrivateDNSName:       "instance-same.ec2.internal",
-			ExpectedNumAddresses: 2,
-		},
-		{
-			Name:                 "ipv4 w/public IP and no public DNS",
-			InstanceID:           "i-00000000000000002",
-			PrivateIP:            "192.168.0.1",
-			PublicIP:             "1.2.3.4",
-			PrivateDNSName:       "instance-other.ec2.internal",
-			ExpectedNumAddresses: 3,
-		},
-		{
-			Name:                 "ipv6 only",
-			InstanceID:           "i-00000000000000003",
-			PrivateIP:            "192.168.0.3",
-			PrivateDNSName:       "instance-ipv6.ec2.internal",
-			Ipv6s:                []string{"2a05:d014:aa7:911:fc7e:1600:fc4d:ab2", "2a05:d014:aa7:911:9f44:e737:1aa0:6489"},
-			SetNetInterface:      true,
-			ExpectedNumAddresses: 1,
-			NodeName:             "foo",
-			Ipv6Only:             true,
-		},
-	} {
-		t.Run(tc.Name, func(t *testing.T) {
-			instance := makeInstance(tc.InstanceID, tc.PrivateIP, tc.PublicIP, tc.PrivateDNSName, tc.PublicDNSName, tc.Ipv6s, tc.SetNetInterface)
-			aws1, _ := mockInstancesResp(&instance, []*ec2.Instance{&instance})
-			_, err := aws1.NodeAddressesByProviderID(context.TODO(), "i-xxx")
-			if err == nil {
-				t.Errorf("Should error when no instance found")
-			}
-			if tc.Ipv6Only {
-				aws1.cfg.Global.NodeIPFamilies = []string{"ipv6"}
-			}
-			if tc.NodeName != "" {
-				aws1.selfAWSInstance.nodeName = types.NodeName(tc.NodeName)
-			}
-			addrs, err := aws1.NodeAddressesByProviderID(context.TODO(), tc.InstanceID)
-			if err != nil {
-				t.Errorf("Should not error when instance found, %s", err)
-			}
-			if len(addrs) != tc.ExpectedNumAddresses {
-				t.Errorf("Should return exactly %d NodeAddresses, got %d (%v)", tc.ExpectedNumAddresses, len(addrs), addrs)
-			}
-
-			if tc.SetNetInterface && !tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeInternalIP, tc.PrivateIP)
-			}
-			if tc.PublicIP != "" {
-				testHasNodeAddress(t, addrs, v1.NodeExternalIP, tc.PublicIP)
-			}
-			if tc.PublicDNSName != "" {
-				testHasNodeAddress(t, addrs, v1.NodeExternalDNS, tc.PublicDNSName)
-			}
-			if tc.PrivateDNSName != "" && !tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeInternalDNS, tc.PrivateDNSName)
-				testHasNodeAddress(t, addrs, v1.NodeHostName, tc.PrivateDNSName)
-			}
-			if tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeInternalIP, tc.Ipv6s[0])
-			}
-		})
+	aws1, _ := mockInstancesResp(&instance0, []*ec2.Instance{&instance0})
+	_, err1 := aws1.NodeAddressesByProviderID(context.TODO(), "i-xxx")
+	if err1 == nil {
+		t.Errorf("Should error when no instance found")
 	}
+
+	aws2, _ := mockInstancesResp(&instance0, instances[0:1])
+	// change node name so it uses the instance instead of metadata
+	aws2.selfAWSInstance.nodeName = "foo"
+	addrs2, err2 := aws2.NodeAddressesByProviderID(context.TODO(), "i-0")
+	if err2 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs2) != 5 {
+		t.Errorf("Should return exactly 5 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs2, v1.NodeInternalIP, "192.168.0.1")
+	testHasNodeAddress(t, addrs2, v1.NodeExternalIP, "1.2.3.4")
+	testHasNodeAddress(t, addrs2, v1.NodeExternalDNS, "instance-same.ec2.external")
+	testHasNodeAddress(t, addrs2, v1.NodeInternalDNS, "instance-same.ec2.internal")
+	testHasNodeAddress(t, addrs2, v1.NodeHostName, "instance-same.ec2.internal")
+
+	aws3, _ := mockInstancesResp(&instance3, instances)
+	aws3.cfg.Global.NodeIPFamilies = []string{"ipv4", "ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws3.selfAWSInstance.nodeName = "foo"
+	addrs3, err3 := aws3.NodeAddressesByProviderID(context.TODO(), "i-3")
+	if err3 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs3) != 4 {
+		t.Errorf("Should return exactly 4 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs3, v1.NodeInternalIP, "192.168.0.3")
+	testHasNodeAddress(t, addrs3, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+	testHasNodeAddress(t, addrs3, v1.NodeInternalDNS, "instance-ipv6.ec2.internal")
+	testHasNodeAddress(t, addrs3, v1.NodeHostName, "instance-ipv6.ec2.internal")
+
+	aws4, _ := mockInstancesResp(&instance3, instances)
+	aws4.cfg.Global.NodeIPFamilies = []string{"ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws4.selfAWSInstance.nodeName = "foo"
+	addrs4, err4 := aws4.NodeAddressesByProviderID(context.TODO(), "i-3")
+	if err4 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs4) != 1 {
+		t.Errorf("Should return exactly 1 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs4, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+
 }
 
 func TestNodeAddresses(t *testing.T) {
-	for _, tc := range []struct {
-		Name            string
-		InstanceID      string
-		PrivateIP       string
-		PublicIP        string
-		PrivateDNSName  string
-		PublicDNSName   string
-		Ipv6s           []string
-		SetNetInterface bool
-		NodeName        string
-		Ipv6Only        bool
+	instance0 := makeInstance(0, "192.168.0.1", "1.2.3.4", "instance-same.ec2.internal", "instance-same.ec2.external", nil, true)
+	instance2 := makeInstance(2, "192.168.0.1", "1.2.3.4", "instance-other.ec2.internal", "", nil, false)
+	instance3 := makeInstance(3, "192.168.0.3", "", "instance-ipv6.ec2.internal", "", []string{"2a05:d014:aa7:911:fc7e:1600:fc4d:ab2", "2a05:d014:aa7:911:9f44:e737:1aa0:6489"}, true)
+	instances := []*ec2.Instance{&instance0, &instance2, &instance3}
 
-		ExpectedNumAddresses int
-	}{
-		{
-			Name:                 "ipv4 w/public IP",
-			InstanceID:           "i-00000000000000000",
-			PrivateIP:            "192.168.0.1",
-			PublicIP:             "1.2.3.4",
-			PrivateDNSName:       "instance-same.ec2.internal",
-			PublicDNSName:        "instance-same.ec2.external",
-			SetNetInterface:      true,
-			NodeName:             "foo",
-			ExpectedNumAddresses: 5,
-		},
-		{
-			Name:                 "ipv4 w/private IP only",
-			InstanceID:           "i-00000000000000002",
-			PrivateIP:            "192.168.0.1",
-			PublicIP:             "1.2.3.4",
-			PrivateDNSName:       "instance-other.ec2.internal",
-			ExpectedNumAddresses: 3,
-		},
-		{
-			Name:                 "ipv6 only",
-			InstanceID:           "i-00000000000000003",
-			PrivateIP:            "192.168.0.3",
-			PrivateDNSName:       "instance-ipv6.ec2.internal",
-			PublicDNSName:        "instance-same.ec2.external",
-			Ipv6s:                []string{"2a05:d014:aa7:911:fc7e:1600:fc4d:ab2", "2a05:d014:aa7:911:9f44:e737:1aa0:6489"},
-			SetNetInterface:      true,
-			Ipv6Only:             true,
-			NodeName:             "foo",
-			ExpectedNumAddresses: 1,
-		},
-		{
-			Name:                 "resource based naming using FQDN",
-			InstanceID:           "i-00000000000000004",
-			PrivateIP:            "192.168.0.4",
-			PublicIP:             "1.2.3.4",
-			PrivateDNSName:       "i-00000000000000004.ec2.internal",
-			SetNetInterface:      true,
-			ExpectedNumAddresses: 4,
-		},
-		{
-			Name:                 "resource based naming using hostname only",
-			InstanceID:           "i-00000000000000005",
-			PrivateIP:            "192.168.0.5",
-			PublicIP:             "1.2.3.4",
-			PrivateDNSName:       "i-00000000000000005",
-			SetNetInterface:      true,
-			ExpectedNumAddresses: 4,
-		},
-	} {
-		t.Run(tc.Name, func(t *testing.T) {
-			instance := makeInstance(tc.InstanceID, tc.PrivateIP, tc.PublicIP, tc.PrivateDNSName, tc.PublicDNSName, tc.Ipv6s, tc.SetNetInterface)
-			aws1, _ := mockInstancesResp(&instance, []*ec2.Instance{&instance})
-			_, err := aws1.NodeAddresses(context.TODO(), "instance-mismatch.ec2.internal")
-			if err == nil {
-				t.Errorf("Should error when no instance found")
-			}
-			if tc.Ipv6Only {
-				aws1.cfg.Global.NodeIPFamilies = []string{"ipv6"}
-			}
-			if tc.NodeName != "" {
-				aws1.selfAWSInstance.nodeName = types.NodeName(tc.NodeName)
-			}
-			addrs, err := aws1.NodeAddresses(context.TODO(), types.NodeName(tc.PrivateDNSName))
-			if err != nil {
-				t.Errorf("Should not error when instance found, %s", err)
-			}
-			if len(addrs) != tc.ExpectedNumAddresses {
-				t.Errorf("Should return exactly %d NodeAddresses, got %d (%v)", tc.ExpectedNumAddresses, len(addrs), addrs)
-			}
-
-			if tc.SetNetInterface && !tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeInternalIP, tc.PrivateIP)
-			}
-			if tc.PublicIP != "" && !tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeExternalIP, tc.PublicIP)
-			}
-			if tc.PublicDNSName != "" && !tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeExternalDNS, tc.PublicDNSName)
-			}
-			if tc.PrivateDNSName != "" && !tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeInternalDNS, tc.PrivateDNSName)
-				testHasNodeAddress(t, addrs, v1.NodeHostName, tc.PrivateDNSName)
-			}
-			if tc.Ipv6Only {
-				testHasNodeAddress(t, addrs, v1.NodeInternalIP, tc.Ipv6s[0])
-			}
-		})
+	aws1, _ := mockInstancesResp(&instance0, []*ec2.Instance{&instance0})
+	_, err1 := aws1.NodeAddresses(context.TODO(), "instance-mismatch.ec2.internal")
+	if err1 == nil {
+		t.Errorf("Should error when no instance found")
 	}
+
+	aws3, _ := mockInstancesResp(&instance0, instances[0:1])
+	// change node name so it uses the instance instead of metadata
+	aws3.selfAWSInstance.nodeName = "foo"
+	addrs3, err3 := aws3.NodeAddresses(context.TODO(), "instance-same.ec2.internal")
+	if err3 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs3) != 5 {
+		t.Errorf("Should return exactly 5 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs3, v1.NodeInternalIP, "192.168.0.1")
+	testHasNodeAddress(t, addrs3, v1.NodeExternalIP, "1.2.3.4")
+	testHasNodeAddress(t, addrs3, v1.NodeExternalDNS, "instance-same.ec2.external")
+	testHasNodeAddress(t, addrs3, v1.NodeInternalDNS, "instance-same.ec2.internal")
+	testHasNodeAddress(t, addrs3, v1.NodeHostName, "instance-same.ec2.internal")
+
+	aws4, _ := mockInstancesResp(&instance3, instances)
+	aws4.cfg.Global.NodeIPFamilies = []string{"ipv4", "ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws4.selfAWSInstance.nodeName = "foo"
+	addrs4, err4 := aws4.NodeAddresses(context.TODO(), "instance-ipv6.ec2.internal")
+	if err4 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs4) != 4 {
+		t.Errorf("Should return exactly 4 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs4, v1.NodeInternalIP, "192.168.0.3")
+	testHasNodeAddress(t, addrs4, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+	testHasNodeAddress(t, addrs4, v1.NodeInternalDNS, "instance-ipv6.ec2.internal")
+	testHasNodeAddress(t, addrs4, v1.NodeHostName, "instance-ipv6.ec2.internal")
+
+	aws5, _ := mockInstancesResp(&instance3, instances)
+	aws5.cfg.Global.NodeIPFamilies = []string{"ipv6"}
+	// change node name so it uses the instance instead of metadata
+	aws5.selfAWSInstance.nodeName = "foo"
+	addrs5, err5 := aws5.NodeAddresses(context.TODO(), "instance-ipv6.ec2.internal")
+	if err5 != nil {
+		t.Errorf("Should not error when instance found")
+	}
+	if len(addrs5) != 1 {
+		t.Errorf("Should return exactly 1 NodeAddresses")
+	}
+	testHasNodeAddress(t, addrs5, v1.NodeInternalIP, "2a05:d014:aa7:911:fc7e:1600:fc4d:ab2")
+
 }
 
 func TestGetRegion(t *testing.T) {
-	aws := mockZone("us-west-2", "us-west-2e")
+	aws := mockAvailabilityZone("us-west-2e")
 	zones, ok := aws.Zones()
 	if !ok {
 		t.Fatalf("Unexpected missing zones impl")
@@ -2581,6 +2587,47 @@ func TestCreateDiskFailDescribeVolume(t *testing.T) {
 	awsServices.ec2.(*MockedFakeEC2).AssertExpectations(t)
 }
 
+func TestRegionIsValid(t *testing.T) {
+	fake := newMockedFakeAWSServices("fakeCluster")
+	fake.selfInstance.Placement = &ec2.Placement{
+		AvailabilityZone: aws.String("pl-fake-999a"),
+	}
+
+	// This is the legacy list that was removed, using this to ensure we avoid
+	// region regressions if something goes wrong in the SDK
+	regions := []string{
+		"ap-northeast-1",
+		"ap-northeast-2",
+		"ap-northeast-3",
+		"ap-south-1",
+		"ap-southeast-1",
+		"ap-southeast-2",
+		"ca-central-1",
+		"eu-central-1",
+		"eu-west-1",
+		"eu-west-2",
+		"eu-west-3",
+		"sa-east-1",
+		"us-east-1",
+		"us-east-2",
+		"us-west-1",
+		"us-west-2",
+		"cn-north-1",
+		"cn-northwest-1",
+		"us-gov-west-1",
+		"ap-northeast-3",
+
+		// Ensures that we always trust what the metadata service returns
+		"pl-fake-999",
+	}
+
+	for _, region := range regions {
+		assert.NoError(t, validateRegion(region, fake.metadata), "expected region '%s' to be valid but it was not", region)
+	}
+
+	assert.Error(t, validateRegion("pl-fake-991a", fake.metadata), "expected region 'pl-fake-991' to be invalid but it was not")
+}
+
 const (
 	testNodeName           = types.NodeName("ip-10-0-0-1.ec2.internal")
 	testInstanceIDNodeName = types.NodeName("i-02bce90670bb0c7cd")
@@ -3278,7 +3325,7 @@ func TestNLBNodeRegistration(t *testing.T) {
 		}
 	}
 
-	fauxService.Annotations[ServiceAnnotationLoadBalancerHealthCheckProtocol] = "tcp"
+	fauxService.Annotations[ServiceAnnotationLoadBalancerHealthCheckProtocol] = "http"
 	tgARN := aws.StringValue(awsServices.elbv2.(*MockedFakeELBV2).Listeners[0].DefaultActions[0].TargetGroupArn)
 	_, err = c.EnsureLoadBalancer(context.TODO(), TestClusterName, fauxService, nodes)
 	if err != nil {
@@ -3431,9 +3478,8 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
+				Port:               "traffic-port",
+				Protocol:           elbv2.ProtocolEnumTcp,
 				Interval:           30,
 				Timeout:            10,
 				HealthyThreshold:   3,
@@ -3611,9 +3657,8 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
+				Port:               "traffic-port",
+				Protocol:           elbv2.ProtocolEnumTcp,
 				Interval:           23,
 				Timeout:            10,
 				HealthyThreshold:   3,
@@ -3670,9 +3715,8 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
+				Port:               "traffic-port",
+				Protocol:           elbv2.ProtocolEnumTcp,
 				Interval:           30,
 				Timeout:            10,
 				HealthyThreshold:   7,
@@ -3860,26 +3904,6 @@ func TestGetZoneByProviderIDForFargate(t *testing.T) {
 	zoneDetails, err := c.GetZoneByProviderID(context.TODO(), "aws:///us-west-2c/1abc-2def/fargate-192.168.164.88")
 	assert.Nil(t, err)
 	assert.Equal(t, "us-west-2c", zoneDetails.FailureDomain)
-}
-
-func TestGetRegionFromMetadata(t *testing.T) {
-	awsServices := newMockedFakeAWSServices(TestClusterID)
-	// Returns region from zone if set
-	cfg := CloudConfig{}
-	cfg.Global.Zone = "us-west-2a"
-	region, err := getRegionFromMetadata(cfg, awsServices.metadata)
-	assert.NoError(t, err)
-	assert.Equal(t, "us-west-2", region)
-	// Returns error if can map to region
-	cfg = CloudConfig{}
-	cfg.Global.Zone = "some-fake-zone"
-	_, err = getRegionFromMetadata(cfg, awsServices.metadata)
-	assert.Error(t, err)
-	// Returns region from metadata if zone unset
-	cfg = CloudConfig{}
-	region, err = getRegionFromMetadata(cfg, awsServices.metadata)
-	assert.NoError(t, err)
-	assert.Equal(t, "us-east-1", region)
 }
 
 type MockedEC2API struct {
