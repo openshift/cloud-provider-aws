@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -3278,7 +3277,7 @@ func TestNLBNodeRegistration(t *testing.T) {
 		}
 	}
 
-	fauxService.Annotations[ServiceAnnotationLoadBalancerHealthCheckProtocol] = "tcp"
+	fauxService.Annotations[ServiceAnnotationLoadBalancerHealthCheckProtocol] = "http"
 	tgARN := aws.StringValue(awsServices.elbv2.(*MockedFakeELBV2).Listeners[0].DefaultActions[0].TargetGroupArn)
 	_, err = c.EnsureLoadBalancer(context.TODO(), TestClusterName, fauxService, nodes)
 	if err != nil {
@@ -3431,9 +3430,8 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
+				Port:               "traffic-port",
+				Protocol:           elbv2.ProtocolEnumTcp,
 				Interval:           30,
 				Timeout:            10,
 				HealthyThreshold:   3,
@@ -3611,9 +3609,8 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
+				Port:               "traffic-port",
+				Protocol:           elbv2.ProtocolEnumTcp,
 				Interval:           23,
 				Timeout:            10,
 				HealthyThreshold:   3,
@@ -3670,9 +3667,8 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
+				Port:               "traffic-port",
+				Protocol:           elbv2.ProtocolEnumTcp,
 				Interval:           30,
 				Timeout:            10,
 				HealthyThreshold:   7,
@@ -3980,6 +3976,61 @@ func TestDescribeInstances(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			mockedEC2API.AssertExpectations(t)
+		})
+	}
+}
+
+func TestInstanceIDIndexFunc(t *testing.T) {
+	type args struct {
+		obj interface{}
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []string
+		wantErr bool
+	}{
+		{
+			name: "returns empty on invalid provider id",
+			args: args{
+				obj: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-node",
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "foo://com-2351",
+					},
+				},
+			},
+			want:    []string{""},
+			wantErr: false,
+		},
+		{
+			name: "returns correct instance id on valid provider id",
+			args: args{
+				obj: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-valid-node",
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "aws:////i-12345678abcdef01",
+					},
+				},
+			},
+			want:    []string{"i-12345678abcdef01"},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := InstanceIDIndexFunc(tt.args.obj)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("InstanceIDIndexFunc() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("InstanceIDIndexFunc() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
