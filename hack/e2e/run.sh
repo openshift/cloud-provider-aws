@@ -47,13 +47,13 @@ UP="${UP:-yes}"
 # if DOWN==yes, delete cluster after test
 DOWN="${DOWN:-yes}"
 
-KUBERNETES_VERSION="${KUBERNETES_VERSION:-v1.26.0}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-$(curl -L -s https://dl.k8s.io/release/stable.txt)}"
 CLUSTER_NAME="${CLUSTER_NAME:-test-cluster-${test_run_id}.k8s}"
 KOPS_STATE_STORE="${KOPS_STATE_STORE:-}"
 REGION="${AWS_REGION:-us-west-2}"
 ZONES="${AWS_AVAILABILITY_ZONES:-us-west-2a,us-west-2b,us-west-2c}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-IMAGE_NAME=${IMAGE_NAME:-${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/amazon/cloud-controller-manager}
+IMAGE_NAME=${IMAGE_NAME:-${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/provider-aws/cloud-controller-manager}
 IMAGE_TAG=${IMAGE_TAG:-${BUILD_VERSION}-${test_run_id}}
 
 # Test args
@@ -110,7 +110,7 @@ echo " + Delete cluster:      ${DOWN}"
 
 export KOPS_STATE_STORE
 # kubetest2 sets RunDir as filepath.Join(artifacts.BaseDir(), o.RunID())
-export ARTIFACTS="${test_output_root}"
+export ARTIFACTS="${ARTIFACTS:-$test_output_root}"
 export KUBETEST2_RUN_DIR="${test_run}"
 
 echo "Installing e2e.test to ${test_run}"
@@ -141,8 +141,9 @@ if [[ "${UP}" = "yes" ]]; then
       #--parallel 25
 fi
 
+set -x
 pushd ./tests/e2e
-ginkgo . -v -p --nodes="${GINKGO_NODES}" --focus="${GINKGO_FOCUS}" --skip="${GINKGO_SKIP}"
+ginkgo . -v -p --nodes="${GINKGO_NODES}" --focus="${GINKGO_FOCUS}" --skip="${GINKGO_SKIP}" --report-dir="${ARTIFACTS}"
 popd
 
 if [[ "${DOWN}" = "yes" ]]; then
