@@ -4,11 +4,15 @@
 approvers:
 - JoelSpeed
 - elmiko
+- nrb
 reviewers:
 - JoelSpeed
 - RadekManak
 - damdo
 - elmiko
+- nrb
 - odvarkadaniel
+- racheljpg
+- vincepri
 component: Cloud Compute
 subcomponent: Cloud Controller Manager
