@@ -450,8 +450,8 @@ func (elb *FakeELB) CreateLoadBalancer(*elb.CreateLoadBalancerInput) (*elb.Creat
 
 // DeleteLoadBalancer is not implemented but is required for interface
 // conformance
-func (elb *FakeELB) DeleteLoadBalancer(input *elb.DeleteLoadBalancerInput) (*elb.DeleteLoadBalancerOutput, error) {
-	panic("Not implemented")
+func (e *FakeELB) DeleteLoadBalancer(input *elb.DeleteLoadBalancerInput) (*elb.DeleteLoadBalancerOutput, error) {
+	return &elb.DeleteLoadBalancerOutput{}, nil
 }
 
 // DescribeLoadBalancers is not implemented but is required for interface
