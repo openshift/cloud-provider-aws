@@ -16,6 +16,10 @@ package tagging
 import (
 	"crypto/md5"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	"golang.org/x/time/rate"
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -28,11 +32,13 @@ import (
 	opt "k8s.io/cloud-provider-aws/pkg/controllers/options"
 	awsv1 "k8s.io/cloud-provider-aws/pkg/providers/v1"
 	nodehelpers "k8s.io/cloud-provider/node/helpers"
+	_ "k8s.io/component-base/metrics/prometheus/workqueue" // enable prometheus provider for workqueue metrics
 	"k8s.io/klog/v2"
-	"sort"
-	"strings"
-	"time"
 )
+
+func init() {
+	registerMetrics()
+}
 
 // workItem contains the node and an action for that node
 type workItem struct {
@@ -62,6 +68,9 @@ const (
 
 	// The label for depicting total number of errors a work item encounter and fail
 	errorsAfterRetriesExhaustedWorkItemErrorMetric = "errors_after_retries_exhausted"
+
+	// The period of time after Node creation to retry tagging due to eventual consistency of the CreateTags API.
+	newNodeEventualConsistencyGracePeriod = time.Minute * 5
 )
 
 // Controller is the controller implementation for tagging cluster resources.
@@ -122,14 +131,13 @@ func NewTaggingController(
 		rateLimitEnabled = false
 	}
 
-	registerMetrics()
 	tc := &Controller{
 		nodeInformer:      nodeInformer,
 		kubeClient:        kubeClient,
 		cloud:             awsCloud,
 		tags:              tags,
 		resources:         resources,
-		workqueue:         workqueue.NewNamedRateLimitingQueue(rateLimiter, "Tagging"),
+		workqueue:         workqueue.NewNamedRateLimitingQueue(rateLimiter, TaggingControllerClientName),
 		nodesSynced:       nodeInformer.Informer().HasSynced,
 		nodeMonitorPeriod: nodeMonitorPeriod,
 		rateLimitEnabled:  rateLimitEnabled,
@@ -213,7 +221,7 @@ func (tc *Controller) process() bool {
 
 		timeTaken := time.Since(workItem.enqueueTime).Seconds()
 		recordWorkItemLatencyMetrics(workItemDequeuingTimeWorkItemMetric, timeTaken)
-		klog.Infof("Dequeuing latency %s", timeTaken)
+		klog.Infof("Dequeuing latency %f seconds", timeTaken)
 
 		instanceID, err := awsv1.KubernetesInstanceID(workItem.node.Spec.ProviderID).MapToAWSInstanceID()
 		if err != nil {
@@ -247,7 +255,7 @@ func (tc *Controller) process() bool {
 			klog.Infof("Finished processing %s", workItem)
 			timeTaken = time.Since(workItem.enqueueTime).Seconds()
 			recordWorkItemLatencyMetrics(workItemProcessingTimeWorkItemMetric, timeTaken)
-			klog.Infof("Processing latency %s", timeTaken)
+			klog.Infof("Processing latency %f seconds", timeTaken)
 		}
 
 		tc.workqueue.Forget(obj)
@@ -291,6 +299,18 @@ func (tc *Controller) tagEc2Instance(node *v1.Node) error {
 	err := tc.cloud.TagResource(string(instanceID), tc.tags)
 
 	if err != nil {
+		if awsv1.IsAWSErrorInstanceNotFound(err) {
+			// This can happen for two reasons.
+			// 1. The CreateTags API is eventually consistent. In rare cases, a newly-created instance may not be taggable for a short period.
+			//    We will re-queue the event and retry.
+			if isNodeWithinEventualConsistencyGracePeriod(node) {
+				return fmt.Errorf("EC2 instance %s for node %s does not exist, but node is within eventual consistency grace period", instanceID, node.GetName())
+			}
+			// 2. The event in our workQueue is stale, and the instance no longer exists.
+			//    Tagging will never succeed, and the event should not be re-queued.
+			klog.Infof("Skip tagging since EC2 instance %s for node %s does not exist", instanceID, node.GetName())
+			return nil
+		}
 		klog.Errorf("Error in tagging EC2 instance %s for node %s, error: %v", instanceID, node.GetName(), err)
 		return err
 	}
@@ -378,4 +398,8 @@ func (tc *Controller) getChecksumOfTags() string {
 	}
 	sort.Strings(tags)
 	return fmt.Sprintf("%x", md5.Sum([]byte(strings.Join(tags, ","))))
+}
+
+func isNodeWithinEventualConsistencyGracePeriod(node *v1.Node) bool {
+	return time.Since(node.CreationTimestamp.Time) < newNodeEventualConsistencyGracePeriod
 }

@@ -1707,7 +1707,7 @@ func (c *Cloud) InstanceExistsByProviderID(ctx context.Context, providerID strin
 	instances, err := c.ec2.DescribeInstances(request)
 	if err != nil {
 		// if err is InstanceNotFound, return false with no error
-		if isAWSErrorInstanceNotFound(err) {
+		if IsAWSErrorInstanceNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -1946,7 +1946,8 @@ func (c *Cloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) 
 
 }
 
-func isAWSErrorInstanceNotFound(err error) bool {
+// IsAWSErrorInstanceNotFound returns true if the specified error is an awserr.Error with the code `InvalidInstanceId.NotFound`.
+func IsAWSErrorInstanceNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -3995,33 +3996,19 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 			UnhealthyThreshold: 2,
 		}
 	}
-
-	var pathModified bool
-	protocolModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol)
-	if protocolModified {
+	if parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol) {
 		hc.Protocol = strings.ToUpper(hc.Protocol)
 	}
-
 	switch hc.Protocol {
 	case elbv2.ProtocolEnumHttp, elbv2.ProtocolEnumHttps:
-		pathModified = parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
+		parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
 	case elbv2.ProtocolEnumTcp:
 		hc.Path = ""
 	default:
 		return healthCheckConfig{}, fmt.Errorf("Unsupported health check protocol %v", hc.Protocol)
 	}
 
-	portModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
-
-	// For a non-local service, we override the health check to use the kube-proxy port when no other overrides are provided.
-	// The kube-proxy port should be open on all nodes and allows the health check to check the nodes ability to proxy traffic.
-	// When the node is shutting down, the health check should fail before the node loses the ability to route traffic to the backend pod.
-	// This allows the load balancer to gracefully drain connections from the node.
-	if svc.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyTypeLocal && !(pathModified || portModified || protocolModified) {
-		hc.Port = kubeProxyHealthCheckPort
-		hc.Path = kubeProxyHealthCheckPath
-		hc.Protocol = elbv2.ProtocolEnumHttp
-	}
+	parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
 
 	if _, err := parseInt64Annotation(svc.Annotations, ServiceAnnotationLoadBalancerHCInterval, &hc.Interval); err != nil {
 		return healthCheckConfig{}, err
@@ -4137,13 +4124,13 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 
 	if isNLB(annotations) {
 		// Find the subnets that the ELB will live in
-		subnetIDs, err := c.getLoadBalancerSubnets(apiService, internalELB)
+		discoveredSubnetIDs, err := c.getLoadBalancerSubnets(apiService, internalELB)
 		if err != nil {
 			klog.Errorf("Error listing subnets in VPC: %q", err)
 			return nil, err
 		}
 		// Bail out early if there are no subnets
-		if len(subnetIDs) == 0 {
+		if len(discoveredSubnetIDs) == 0 {
 			return nil, fmt.Errorf("could not find any suitable subnets for creating the ELB")
 		}
 
@@ -4160,7 +4147,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			loadBalancerName,
 			v2Mappings,
 			instanceIDs,
-			subnetIDs,
+			discoveredSubnetIDs,
 			internalELB,
 			annotations,
 		)
@@ -4168,7 +4155,16 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			return nil, err
 		}
 
-		subnetCidrs, err := c.getSubnetCidrs(subnetIDs)
+		// try to get the ensured subnets of the LBs from AZs
+		var ensuredSubnetIDs []string
+		var subnetCidrs []string
+		for _, az := range v2LoadBalancer.AvailabilityZones {
+			ensuredSubnetIDs = append(ensuredSubnetIDs, *az.SubnetId)
+		}
+		if len(ensuredSubnetIDs) == 0 {
+			return nil, fmt.Errorf("did not find ensured subnets on LB %s", loadBalancerName)
+		}
+		subnetCidrs, err = c.getSubnetCidrs(ensuredSubnetIDs)
 		if err != nil {
 			klog.Errorf("Error getting subnet cidrs: %q", err)
 			return nil, err
@@ -4412,9 +4408,15 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 	} else {
 		klog.V(4).Infof("service %v does not need custom health checks", apiService.Name)
-
-		// Use the kube-proxy port as the health check port for non-local services.
-		err = c.ensureLoadBalancerHealthCheck(loadBalancer, "HTTP", kubeProxyHealthCheckPortInt, kubeProxyHealthCheckPath, annotations)
+		annotationProtocol := strings.ToLower(annotations[ServiceAnnotationLoadBalancerBEProtocol])
+		var hcProtocol string
+		if annotationProtocol == "https" || annotationProtocol == "ssl" {
+			hcProtocol = "SSL"
+		} else {
+			hcProtocol = "TCP"
+		}
+		// there must be no path on TCP health check
+		err = c.ensureLoadBalancerHealthCheck(loadBalancer, hcProtocol, tcpHealthCheckPort, "", annotations)
 		if err != nil {
 			return nil, err
 		}
