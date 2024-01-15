@@ -47,7 +47,7 @@
 %global golang_version 1.21.0
 %{!?version: %global version 0.0.1}
 %{!?release: %global release 1}
-%global package_name ecr-credential-provider 
+%global package_name ecr-credential-provider
 %global product_name ecr-credential-provider
 
 Name:           %{package_name}
@@ -56,7 +56,7 @@ Release:        %{release}%{?dist}
 Summary:        AWS ecr kubelet image credential provider
 License:        ASL 2.0
 
-Source0:        %{name}-%{version}.tar.gz
+Source0:        %{name}.tar.gz
 BuildRequires:  bsdtar
 BuildRequires:  golang >= %{golang_version}
 
