@@ -125,18 +125,18 @@ VERSION=v${OS_GIT_VERSION} make ecr-credential-provider
 %install
 
 PLATFORM="$(go env GOHOSTOS)-$(go env GOHOSTARCH)"
-install -d %{buildroot}%{_bindir}
+install -d %{buildroot}%{_libexecdir}/kubelet-image-credential-provider-plugins
 
 # Install linux components
 for bin in ecr-credential-provider 
 do
   echo "+++ INSTALLING ${bin}"
-  install -p -m 755 %{_builddir}/%{name}-%{version}/${bin} %{buildroot}%{_bindir}/${bin}
+  install -p -m 755 %{_builddir}/%{name}-%{version}/${bin} %{buildroot}%{_libexecdir}/kubelet-image-credential-provider-plugins/${bin}
 done
 
 %files
 %license LICENSE
-%{_bindir}/ecr-credential-provider
+%{_libexecdir}/kubelet-image-credential-provider-plugins/ecr-credential-provider
 
 %pre
 
