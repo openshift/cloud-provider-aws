@@ -7,6 +7,10 @@ mkdir -p ${source_path}
 # Getting version from args
 version=${1:-4.14.0}
 
+# Install dependencies required
+dnf install -y rpmdevtools
+dnf install -y createrepo
+dnf builddep -y ecr-credential-provider.spec
 # Trick to make sure we'll install this RPM later on, not the one from the repo.
 release=999999999999
 
@@ -14,9 +18,9 @@ release=999999999999
 #              ${service}-${version} directory, hence this --transform option.
 #              We exclude .git as rpmbuild will do its own `git init`.
 #              Excluding .tox is convenient for local builds.
-tar -czvf ${source_path}/ecr-credential-provider.tar.gz --exclude=.git --exclude=.tox --transform "flags=r;s|\.|ecr-credential-provider-${version}|" .
+tar -czf ${source_path}/ecr-credential-provider.tar.gz --exclude=.git --exclude=.tox --transform "flags=r;s|\.|ecr-credential-provider-${version}|" .
 
 
-rpmbuild -ba -D "_version $version" -D "_release $release" -D "_topdir `pwd`/_output" ecr-credential-provider.spec
-# TODO: We might need to change this
-createrepo _output/RPMS/noarch
+rpmbuild -ba -D "version $version" -D "release $release" -D "os_git_vars OS_GIT_VERSION=$version" -D "_topdir \`pwd\`/_output" ecr-credential-provider.spec
+
+createrepo _output/RPMS/x86_64
