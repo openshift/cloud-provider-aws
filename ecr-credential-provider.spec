@@ -9,7 +9,7 @@
 # modifying the Go binaries breaks the DWARF debugging
 %global __os_install_post %{_rpmconfigdir}/brp-compress
 
-# %commit and %os_git_vars are intended to be set by tito custom builders
+# %commit and os_git_vars are intended to be set by tito custom builders
 # provided in the .tito/lib directory. The values in this spec file will not be
 # kept up to date.
 %{!?commit: %global commit HEAD }
