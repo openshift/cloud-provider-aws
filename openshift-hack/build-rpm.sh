@@ -21,6 +21,6 @@ release=999999999999
 tar -czf ${source_path}/ecr-credential-provider.tar.gz --exclude=.git --exclude=.tox --transform "flags=r;s|\.|ecr-credential-provider-${version}|" .
 
 
-rpmbuild -ba -D "version $version" -D "release $release" -D "os_git_vars OS_GIT_VERSION=$version" -D "_topdir \`pwd\`/_output" ecr-credential-provider.spec
+rpmbuild -ba -D "version $version" -D "release $release" -D "os_git_vars OS_GIT_VERSION=$version" -D "_topdir `pwd`/_output" ecr-credential-provider.spec
 
 createrepo _output/RPMS/x86_64
