@@ -59,6 +59,7 @@ License:        ASL 2.0
 Source0:        %{name}.tar.gz
 BuildRequires:  bsdtar
 BuildRequires:  golang >= %{golang_version}
+Provides:       ose-aws-ecr-image-credential-provider = %{version}-%{release}
 
 # If go_arches not defined fall through to implicit golang archs
 %if 0%{?go_arches:1}
