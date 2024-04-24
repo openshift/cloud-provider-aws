@@ -11,8 +11,9 @@ version=${1:-4.14.0}
 dnf install -y rpmdevtools
 dnf install -y createrepo
 dnf builddep -y ecr-credential-provider.spec
-# Trick to make sure we'll install this RPM later on, not the one from the repo.
-release=999999999999
+
+# Use the build time as the release, ensuring we install this build.
+release=${2:-$(date -u +'%Y%m%dT%H%M%SZ')}
 
 # NOTE:        rpmbuild requires that inside the tar there will be a
 #              ${service}-${version} directory, hence this --transform option.
