@@ -31,6 +31,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"k8s.io/klog/v2"
+
+	"k8s.io/cloud-provider-aws/pkg/providers/v1/config"
+	"k8s.io/cloud-provider-aws/pkg/providers/v1/iface"
 )
 
 // FakeAWSServices is an fake AWS session used for testing
@@ -55,7 +58,7 @@ type FakeAWSServices struct {
 // NewFakeAWSServices creates a new FakeAWSServices
 func NewFakeAWSServices(clusterID string) *FakeAWSServices {
 	s := &FakeAWSServices{}
-	s.region = "us-east-1"
+	s.region = "us-west-2"
 	s.ec2 = &FakeEC2Impl{aws: s}
 	s.elb = &FakeELB{aws: s}
 	s.elbv2 = &FakeELBV2{aws: s}
@@ -69,7 +72,7 @@ func NewFakeAWSServices(clusterID string) *FakeAWSServices {
 	selfInstance := &ec2.Instance{}
 	selfInstance.InstanceId = aws.String("i-self")
 	selfInstance.Placement = &ec2.Placement{
-		AvailabilityZone: aws.String("us-east-1a"),
+		AvailabilityZone: aws.String("us-west-2a"),
 	}
 	selfInstance.PrivateDnsName = aws.String("ip-172-20-0-100.ec2.internal")
 	selfInstance.PrivateIpAddress = aws.String("192.168.0.1")
@@ -151,7 +154,7 @@ func (s *FakeAWSServices) countCall(service string, api string, resourceID strin
 }
 
 // Compute returns a fake EC2 client
-func (s *FakeAWSServices) Compute(region string) (EC2, error) {
+func (s *FakeAWSServices) Compute(region string) (iface.EC2, error) {
 	return s.ec2, nil
 }
 
@@ -171,7 +174,7 @@ func (s *FakeAWSServices) Autoscaling(region string) (ASG, error) {
 }
 
 // Metadata returns a fake EC2Metadata client
-func (s *FakeAWSServices) Metadata() (EC2Metadata, error) {
+func (s *FakeAWSServices) Metadata() (config.EC2Metadata, error) {
 	return s.metadata, nil
 }
 
@@ -182,7 +185,7 @@ func (s *FakeAWSServices) KeyManagement(region string) (KMS, error) {
 
 // FakeEC2 is a fake EC2 client used for testing
 type FakeEC2 interface {
-	EC2
+	iface.EC2
 	CreateSubnet(*ec2.Subnet) (*ec2.CreateSubnetOutput, error)
 	RemoveSubnets()
 	CreateRouteTable(*ec2.RouteTable) (*ec2.CreateRouteTableOutput, error)
@@ -326,23 +329,33 @@ func (ec2i *FakeEC2Impl) RemoveSubnets() {
 // DescribeAvailabilityZones returns fake availability zones
 // For every input returns a hardcoded list of fake availability zones for the moment
 func (ec2i *FakeEC2Impl) DescribeAvailabilityZones(request *ec2.DescribeAvailabilityZonesInput) ([]*ec2.AvailabilityZone, error) {
-	var azs []*ec2.AvailabilityZone
-
-	fakeZones := [5]string{"az-local", "az-wavelength", "us-west-2a", "us-west-2b", "us-west-2c"}
-	for _, name := range fakeZones {
-		var zoneType *string
-		switch name {
-		case "az-local":
-			zoneType = aws.String(localZoneType)
-		case "az-wavelength":
-			zoneType = aws.String(wavelengthZoneType)
-		default:
-			zoneType = aws.String(regularAvailabilityZoneType)
-		}
-		zone := &ec2.AvailabilityZone{ZoneName: aws.String(name), ZoneType: zoneType, ZoneId: aws.String(name)}
-		azs = append(azs, zone)
-	}
-	return azs, nil
+	return []*ec2.AvailabilityZone{
+		{
+			ZoneName: aws.String("us-west-2a"),
+			ZoneType: aws.String("availability-zone"),
+			ZoneId:   aws.String("az1"),
+		},
+		{
+			ZoneName: aws.String("us-west-2b"),
+			ZoneType: aws.String("availability-zone"),
+			ZoneId:   aws.String("az2"),
+		},
+		{
+			ZoneName: aws.String("us-west-2c"),
+			ZoneType: aws.String("availability-zone"),
+			ZoneId:   aws.String("az3"),
+		},
+		{
+			ZoneName: aws.String("az-local"),
+			ZoneType: aws.String("local-zone"),
+			ZoneId:   aws.String("lz1"),
+		},
+		{
+			ZoneName: aws.String("az-wavelength"),
+			ZoneType: aws.String("wavelength"),
+			ZoneId:   aws.String("wl1"),
+		},
+	}, nil
 }
 
 // CreateTags is a mock for CreateTags from EC2
@@ -808,6 +821,7 @@ func contains(haystack []*string, needle string) bool {
 
 // DescribeNetworkInterfaces returns list of ENIs for testing
 func (ec2i *FakeEC2Impl) DescribeNetworkInterfaces(input *ec2.DescribeNetworkInterfacesInput) (*ec2.DescribeNetworkInterfacesOutput, error) {
+	fargateNodeNamePrefix := "fargate-"
 	networkInterface := []*ec2.NetworkInterface{
 		{
 			PrivateIpAddress: aws.String("1.2.3.4"),

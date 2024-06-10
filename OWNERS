@@ -11,8 +11,7 @@ reviewers:
 - damdo
 - elmiko
 - nrb
-- odvarkadaniel
 - racheljpg
-- vincepri
+- theobarberbany
 component: Cloud Compute
 subcomponent: Cloud Controller Manager
