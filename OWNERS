@@ -5,6 +5,7 @@ approvers:
 - JoelSpeed
 - elmiko
 - nrb
+- theobarberbany
 reviewers:
 - JoelSpeed
 - RadekManak
@@ -12,6 +13,7 @@ reviewers:
 - elmiko
 - nrb
 - racheljpg
+- sub-mod
 - theobarberbany
 component: Cloud Compute
 subcomponent: Cloud Controller Manager
