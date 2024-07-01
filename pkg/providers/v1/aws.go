@@ -681,6 +681,14 @@ func (c *Cloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, 
 	c.eventBroadcaster.StartStructuredLogging(0)
 	c.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.kubeClient.CoreV1().Events("")})
 	c.eventRecorder = c.eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "aws-cloud-provider"})
+
+	v, err := c.kubeClient.Discovery().ServerVersion()
+	if err != nil {
+		klog.Errorf("Error looking up cluster version: %q", err)
+	} else {
+		klog.Infof("cluster version: v%s.%s. git version: %s. git tree state: %s. commit: %s. platform: %s",
+			v.Major, v.Minor, v.GitVersion, v.GitTreeState, v.GitCommit, v.Platform)
+	}
 }
 
 // Clusters returns the list of clusters.
@@ -1938,15 +1946,11 @@ func (c *Cloud) buildELBSecurityGroupList(serviceName types.NamespacedName, load
 // from buildELBSecurityGroupList. The logic is:
 //   - securityGroups specified by ServiceAnnotationLoadBalancerSecurityGroups appears first in order
 //   - securityGroups specified by ServiceAnnotationLoadBalancerExtraSecurityGroups appears last in order
-func (c *Cloud) sortELBSecurityGroupList(securityGroupIDs []string, annotations map[string]string, taggedLBSecurityGroups map[string]struct{}) {
+func (c *Cloud) sortELBSecurityGroupList(securityGroupIDs []string, annotations map[string]string) {
 	annotatedSGList := getSGListFromAnnotation(annotations[ServiceAnnotationLoadBalancerSecurityGroups])
 	annotatedExtraSGList := getSGListFromAnnotation(annotations[ServiceAnnotationLoadBalancerExtraSecurityGroups])
 	annotatedSGIndex := make(map[string]int, len(annotatedSGList))
 	annotatedExtraSGIndex := make(map[string]int, len(annotatedExtraSGList))
-
-	if taggedLBSecurityGroups == nil {
-		taggedLBSecurityGroups = make(map[string]struct{})
-	}
 
 	for i, sgID := range annotatedSGList {
 		annotatedSGIndex[sgID] = i
@@ -1965,11 +1969,7 @@ func (c *Cloud) sortELBSecurityGroupList(securityGroupIDs []string, annotations 
 		}
 	}
 	sort.Slice(securityGroupIDs, func(i, j int) bool {
-		// If i is tagged but j is not, then i should be before j.
-		_, iTagged := taggedLBSecurityGroups[securityGroupIDs[i]]
-		_, jTagged := taggedLBSecurityGroups[securityGroupIDs[j]]
-
-		return sgOrderMapping[securityGroupIDs[i]] < sgOrderMapping[securityGroupIDs[j]] || iTagged && !jTagged
+		return sgOrderMapping[securityGroupIDs[i]] < sgOrderMapping[securityGroupIDs[j]]
 	})
 }
 
@@ -2072,33 +2072,19 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 			UnhealthyThreshold: 2,
 		}
 	}
-
-	var pathModified bool
-	protocolModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol)
-	if protocolModified {
+	if parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol) {
 		hc.Protocol = strings.ToUpper(hc.Protocol)
 	}
-
 	switch hc.Protocol {
 	case elbv2.ProtocolEnumHttp, elbv2.ProtocolEnumHttps:
-		pathModified = parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
+		parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
 	case elbv2.ProtocolEnumTcp:
 		hc.Path = ""
 	default:
 		return healthCheckConfig{}, fmt.Errorf("Unsupported health check protocol %v", hc.Protocol)
 	}
 
-	portModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
-
-	// For a non-local service, we override the health check to use the kube-proxy port when no other overrides are provided.
-	// The kube-proxy port should be open on all nodes and allows the health check to check the nodes ability to proxy traffic.
-	// When the node is shutting down, the health check should fail before the node loses the ability to route traffic to the backend pod.
-	// This allows the load balancer to gracefully drain connections from the node.
-	if svc.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyTypeLocal && !(pathModified || portModified || protocolModified) {
-		hc.Port = kubeProxyHealthCheckPort
-		hc.Path = kubeProxyHealthCheckPath
-		hc.Protocol = elbv2.ProtocolEnumHttp
-	}
+	parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
 
 	if _, err := parseInt64Annotation(svc.Annotations, ServiceAnnotationLoadBalancerHCInterval, &hc.Interval); err != nil {
 		return healthCheckConfig{}, err
@@ -2498,15 +2484,21 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 	} else {
 		klog.V(4).Infof("service %v does not need custom health checks", apiService.Name)
-
-		// Use the kube-proxy port as the health check port for non-local services.
-		err = c.ensureLoadBalancerHealthCheck(loadBalancer, "HTTP", kubeProxyHealthCheckPortInt, kubeProxyHealthCheckPath, annotations)
+		annotationProtocol := strings.ToLower(annotations[ServiceAnnotationLoadBalancerBEProtocol])
+		var hcProtocol string
+		if annotationProtocol == "https" || annotationProtocol == "ssl" {
+			hcProtocol = "SSL"
+		} else {
+			hcProtocol = "TCP"
+		}
+		// there must be no path on TCP health check
+		err = c.ensureLoadBalancerHealthCheck(loadBalancer, hcProtocol, tcpHealthCheckPort, "", annotations)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err = c.updateInstanceSecurityGroupsForLoadBalancer(loadBalancer, instances, annotations, false)
+	err = c.updateInstanceSecurityGroupsForLoadBalancer(loadBalancer, instances, annotations)
 	if err != nil {
 		klog.Warningf("Error opening ingress rules for the load balancer to the instances: %q", err)
 		return nil, err
@@ -2667,7 +2659,7 @@ func (c *Cloud) getTaggedSecurityGroups() (map[string]*ec2.SecurityGroup, error)
 
 // Open security group ingress rules on the instances so that the load balancer can talk to them
 // Will also remove any security groups ingress rules for the load balancer that are _not_ needed for allInstances
-func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(lb *elb.LoadBalancerDescription, instances map[InstanceID]*ec2.Instance, annotations map[string]string, isDeleting bool) error {
+func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(lb *elb.LoadBalancerDescription, instances map[InstanceID]*ec2.Instance, annotations map[string]string) error {
 	if c.cfg.Global.DisableSecurityGroupIngress {
 		return nil
 	}
@@ -2677,24 +2669,11 @@ func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(lb *elb.LoadBalancer
 	if len(lbSecurityGroupIDs) == 0 {
 		return fmt.Errorf("could not determine security group for load balancer: %s", aws.StringValue(lb.LoadBalancerName))
 	}
-
-	taggedSecurityGroups, err := c.getTaggedSecurityGroups()
-	if err != nil {
-		return fmt.Errorf("error querying for tagged security groups: %q", err)
-	}
-
-	taggedLBSecurityGroups := make(map[string]struct{})
-	for _, sg := range lbSecurityGroupIDs {
-		if _, ok := taggedSecurityGroups[sg]; ok {
-			taggedLBSecurityGroups[sg] = struct{}{}
-		}
-	}
-
-	c.sortELBSecurityGroupList(lbSecurityGroupIDs, annotations, taggedLBSecurityGroups)
+	c.sortELBSecurityGroupList(lbSecurityGroupIDs, annotations)
 	loadBalancerSecurityGroupID := lbSecurityGroupIDs[0]
 
 	// Get the actual list of groups that allow ingress from the load-balancer
-	actualGroups := make(map[*ec2.SecurityGroup]bool)
+	var actualGroups []*ec2.SecurityGroup
 	{
 		describeRequest := &ec2.DescribeSecurityGroupsInput{}
 		describeRequest.Filters = []*ec2.Filter{
@@ -2705,8 +2684,16 @@ func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(lb *elb.LoadBalancer
 			return fmt.Errorf("error querying security groups for ELB: %q", err)
 		}
 		for _, sg := range response {
-			actualGroups[sg] = c.tagging.hasClusterTag(sg.Tags)
+			if !c.tagging.hasClusterTag(sg.Tags) {
+				continue
+			}
+			actualGroups = append(actualGroups, sg)
 		}
+	}
+
+	taggedSecurityGroups, err := c.getTaggedSecurityGroups()
+	if err != nil {
+		return fmt.Errorf("error querying for tagged security groups: %q", err)
 	}
 
 	// Open the firewall from the load balancer to the instance
@@ -2738,7 +2725,7 @@ func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(lb *elb.LoadBalancer
 	}
 
 	// Compare to actual groups
-	for actualGroup, hasClusterTag := range actualGroups {
+	for _, actualGroup := range actualGroups {
 		actualGroupID := aws.StringValue(actualGroup.GroupId)
 		if actualGroupID == "" {
 			klog.Warning("Ignoring group without ID: ", actualGroup)
@@ -2750,12 +2737,8 @@ func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(lb *elb.LoadBalancer
 			// We don't need to make a change; the permission is already in place
 			delete(instanceSecurityGroupIds, actualGroupID)
 		} else {
-			if hasClusterTag || isDeleting {
-				// If the group is tagged, and we don't need the rule, we should remove it.
-				// If the security group is deleting, we should also remove the rule else
-				// we cannot remove the security group, we wiil get a dependency violation.
-				instanceSecurityGroupIds[actualGroupID] = false
-			}
+			// This group is not needed by allInstances; delete it
+			instanceSecurityGroupIds[actualGroupID] = false
 		}
 	}
 
@@ -2864,11 +2847,28 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 		return nil
 	}
 
-	// Collect the security groups to delete.
-	// We need to know this ahead of time so that we can check
-	// if the load balancer security group is being deleted.
-	securityGroupIDs := map[string]struct{}{}
-	taggedLBSecurityGroups := map[string]struct{}{}
+	{
+		// De-authorize the load balancer security group from the instances security group
+		err = c.updateInstanceSecurityGroupsForLoadBalancer(lb, nil, service.Annotations)
+		if err != nil {
+			klog.Errorf("Error deregistering load balancer from instance security groups: %q", err)
+			return err
+		}
+	}
+
+	{
+		// Delete the load balancer itself
+		request := &elb.DeleteLoadBalancerInput{}
+		request.LoadBalancerName = lb.LoadBalancerName
+
+		_, err = c.elb.DeleteLoadBalancer(request)
+		if err != nil {
+			// TODO: Check if error was because load balancer was concurrently deleted
+			klog.Errorf("Error deleting load balancer: %q", err)
+			return err
+		}
+	}
+
 	{
 		// Delete the security group(s) for the load balancer
 		// Note that this is annoying: the load balancer disappears from the API immediately, but it is still
@@ -2884,6 +2884,9 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 		if err != nil {
 			return fmt.Errorf("error querying security groups for ELB: %q", err)
 		}
+
+		// Collect the security groups to delete
+		securityGroupIDs := map[string]struct{}{}
 		annotatedSgSet := map[string]bool{}
 		annotatedSgsList := getSGListFromAnnotation(service.Annotations[ServiceAnnotationLoadBalancerSecurityGroups])
 		annotatedExtraSgsList := getSGListFromAnnotation(service.Annotations[ServiceAnnotationLoadBalancerExtraSecurityGroups])
@@ -2908,8 +2911,6 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			if !c.tagging.hasClusterTag(sg.Tags) {
 				klog.Warningf("Ignoring security group with no cluster tag in %s", service.Name)
 				continue
-			} else {
-				taggedLBSecurityGroups[sgID] = struct{}{}
 			}
 
 			// This is an extra protection of deletion of non provisioned Security Group which is annotated with `service.beta.kubernetes.io/aws-load-balancer-security-groups`.
@@ -2920,41 +2921,6 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 
 			securityGroupIDs[sgID] = struct{}{}
 		}
-	}
-
-	{
-		// Determine the load balancer security group id
-		lbSecurityGroupIDs := aws.StringValueSlice(lb.SecurityGroups)
-		if len(lbSecurityGroupIDs) == 0 {
-			return fmt.Errorf("could not determine security group for load balancer: %s", aws.StringValue(lb.LoadBalancerName))
-		}
-		c.sortELBSecurityGroupList(lbSecurityGroupIDs, service.Annotations, taggedLBSecurityGroups)
-		loadBalancerSecurityGroupID := lbSecurityGroupIDs[0]
-
-		_, isDeleteingLBSecurityGroup := securityGroupIDs[loadBalancerSecurityGroupID]
-
-		// De-authorize the load balancer security group from the instances security group
-		err = c.updateInstanceSecurityGroupsForLoadBalancer(lb, nil, service.Annotations, isDeleteingLBSecurityGroup)
-		if err != nil {
-			klog.Errorf("Error deregistering load balancer from instance security groups: %q", err)
-			return err
-		}
-	}
-
-	{
-		// Delete the load balancer itself
-		request := &elb.DeleteLoadBalancerInput{}
-		request.LoadBalancerName = lb.LoadBalancerName
-
-		_, err = c.elb.DeleteLoadBalancer(request)
-		if err != nil {
-			// TODO: Check if error was because load balancer was concurrently deleted
-			klog.Errorf("Error deleting load balancer: %q", err)
-			return err
-		}
-	}
-
-	{
 
 		// Loop through and try to delete them
 		timeoutAt := time.Now().Add(time.Second * 600)
@@ -3050,7 +3016,7 @@ func (c *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, serv
 		return nil
 	}
 
-	err = c.updateInstanceSecurityGroupsForLoadBalancer(lb, instances, service.Annotations, false)
+	err = c.updateInstanceSecurityGroupsForLoadBalancer(lb, instances, service.Annotations)
 	if err != nil {
 		return err
 	}
