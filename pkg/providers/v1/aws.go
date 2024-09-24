@@ -681,14 +681,6 @@ func (c *Cloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, 
 	c.eventBroadcaster.StartStructuredLogging(0)
 	c.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.kubeClient.CoreV1().Events("")})
 	c.eventRecorder = c.eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "aws-cloud-provider"})
-
-	v, err := c.kubeClient.Discovery().ServerVersion()
-	if err != nil {
-		klog.Errorf("Error looking up cluster version: %q", err)
-	} else {
-		klog.Infof("cluster version: v%s.%s. git version: %s. git tree state: %s. commit: %s. platform: %s",
-			v.Major, v.Minor, v.GitVersion, v.GitTreeState, v.GitCommit, v.Platform)
-	}
 }
 
 // Clusters returns the list of clusters.
@@ -3055,8 +3047,7 @@ func (c *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, serv
 
 	err = c.ensureLoadBalancerInstances(aws.StringValue(lb.LoadBalancerName), lb.Instances, instances)
 	if err != nil {
-		klog.Warningf("Error registering/deregistering instances with the load balancer: %q", err)
-		return err
+		return nil
 	}
 
 	err = c.updateInstanceSecurityGroupsForLoadBalancer(lb, instances, service.Annotations, false)
