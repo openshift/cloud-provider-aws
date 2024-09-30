@@ -2080,33 +2080,19 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 			UnhealthyThreshold: 2,
 		}
 	}
-
-	var pathModified bool
-	protocolModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol)
-	if protocolModified {
+	if parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol) {
 		hc.Protocol = strings.ToUpper(hc.Protocol)
 	}
-
 	switch hc.Protocol {
 	case elbv2.ProtocolEnumHttp, elbv2.ProtocolEnumHttps:
-		pathModified = parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
+		parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
 	case elbv2.ProtocolEnumTcp:
 		hc.Path = ""
 	default:
 		return healthCheckConfig{}, fmt.Errorf("Unsupported health check protocol %v", hc.Protocol)
 	}
 
-	portModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
-
-	// For a non-local service, we override the health check to use the kube-proxy port when no other overrides are provided.
-	// The kube-proxy port should be open on all nodes and allows the health check to check the nodes ability to proxy traffic.
-	// When the node is shutting down, the health check should fail before the node loses the ability to route traffic to the backend pod.
-	// This allows the load balancer to gracefully drain connections from the node.
-	if svc.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyTypeLocal && !(pathModified || portModified || protocolModified) {
-		hc.Port = kubeProxyHealthCheckPort
-		hc.Path = kubeProxyHealthCheckPath
-		hc.Protocol = elbv2.ProtocolEnumHttp
-	}
+	parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
 
 	if _, err := parseInt64Annotation(svc.Annotations, ServiceAnnotationLoadBalancerHCInterval, &hc.Interval); err != nil {
 		return healthCheckConfig{}, err
@@ -2506,9 +2492,15 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 	} else {
 		klog.V(4).Infof("service %v does not need custom health checks", apiService.Name)
-
-		// Use the kube-proxy port as the health check port for non-local services.
-		err = c.ensureLoadBalancerHealthCheck(loadBalancer, "HTTP", kubeProxyHealthCheckPortInt, kubeProxyHealthCheckPath, annotations)
+		annotationProtocol := strings.ToLower(annotations[ServiceAnnotationLoadBalancerBEProtocol])
+		var hcProtocol string
+		if annotationProtocol == "https" || annotationProtocol == "ssl" {
+			hcProtocol = "SSL"
+		} else {
+			hcProtocol = "TCP"
+		}
+		// there must be no path on TCP health check
+		err = c.ensureLoadBalancerHealthCheck(loadBalancer, hcProtocol, tcpHealthCheckPort, "", annotations)
 		if err != nil {
 			return nil, err
 		}
