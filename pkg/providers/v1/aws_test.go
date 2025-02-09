@@ -3086,7 +3086,7 @@ func TestNLBNodeRegistration(t *testing.T) {
 		}
 	}
 
-	fauxService.Annotations[ServiceAnnotationLoadBalancerHealthCheckProtocol] = "http"
+	fauxService.Annotations[ServiceAnnotationLoadBalancerHealthCheckProtocol] = "tcp"
 	tgARN := aws.StringValue(awsServices.elbv2.(*MockedFakeELBV2).Listeners[0].DefaultActions[0].TargetGroupArn)
 	_, err = c.EnsureLoadBalancer(context.TODO(), TestClusterName, fauxService, nodes)
 	if err != nil {
@@ -3223,12 +3223,11 @@ func TestCloud_sortELBSecurityGroupList(t *testing.T) {
 
 func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 	tests := []struct {
-		name         string
-		annotations  map[string]string
-		service      *v1.Service
-		modifyConfig func(*config.CloudConfig)
-		want         healthCheckConfig
-		wantError    bool
+		name        string
+		annotations map[string]string
+		service     *v1.Service
+		want        healthCheckConfig
+		wantError   bool
 	}{
 		{
 			name:        "default cluster",
@@ -3251,112 +3250,9 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "traffic-port",
-				Protocol:           elbv2.ProtocolEnumTcp,
-				Interval:           30,
-				Timeout:            10,
-				HealthyThreshold:   3,
-				UnhealthyThreshold: 3,
-			},
-			wantError: false,
-		},
-		{
-			name:        "default cluster with shared health check",
-			annotations: map[string]string{},
-			service: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-svc",
-					UID:  "UID",
-				},
-				Spec: v1.ServiceSpec{
-					Ports: []v1.ServicePort{
-						{
-							Name:       "http",
-							Protocol:   v1.ProtocolTCP,
-							Port:       8080,
-							TargetPort: intstr.FromInt(8880),
-							NodePort:   32205,
-						},
-					},
-				},
-			},
-			modifyConfig: func(cfg *config.CloudConfig) {
-				cfg.Global.ClusterServiceLoadBalancerHealthProbeMode = config.ClusterServiceLoadBalancerHealthProbeModeShared
-			},
-			want: healthCheckConfig{
 				Port:               "10256",
 				Protocol:           elbv2.ProtocolEnumHttp,
 				Path:               "/healthz",
-				Interval:           30,
-				Timeout:            10,
-				HealthyThreshold:   3,
-				UnhealthyThreshold: 3,
-			},
-			wantError: false,
-		},
-		{
-			name:        "default cluster with shared health check and custom port",
-			annotations: map[string]string{},
-			service: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-svc",
-					UID:  "UID",
-				},
-				Spec: v1.ServiceSpec{
-					Ports: []v1.ServicePort{
-						{
-							Name:       "http",
-							Protocol:   v1.ProtocolTCP,
-							Port:       8080,
-							TargetPort: intstr.FromInt(8880),
-							NodePort:   32205,
-						},
-					},
-				},
-			},
-			modifyConfig: func(cfg *config.CloudConfig) {
-				cfg.Global.ClusterServiceLoadBalancerHealthProbeMode = config.ClusterServiceLoadBalancerHealthProbeModeShared
-				cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePort = 8080
-			},
-			want: healthCheckConfig{
-				Port:               "8080",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/healthz",
-				Interval:           30,
-				Timeout:            10,
-				HealthyThreshold:   3,
-				UnhealthyThreshold: 3,
-			},
-			wantError: false,
-		},
-		{
-			name:        "default cluster with shared health check and custom path",
-			annotations: map[string]string{},
-			service: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-svc",
-					UID:  "UID",
-				},
-				Spec: v1.ServiceSpec{
-					Ports: []v1.ServicePort{
-						{
-							Name:       "http",
-							Protocol:   v1.ProtocolTCP,
-							Port:       8080,
-							TargetPort: intstr.FromInt(8880),
-							NodePort:   32205,
-						},
-					},
-				},
-			},
-			modifyConfig: func(cfg *config.CloudConfig) {
-				cfg.Global.ClusterServiceLoadBalancerHealthProbeMode = config.ClusterServiceLoadBalancerHealthProbeModeShared
-				cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePath = "/custom-healthz"
-			},
-			want: healthCheckConfig{
-				Port:               "10256",
-				Protocol:           elbv2.ProtocolEnumHttp,
-				Path:               "/custom-healthz",
 				Interval:           30,
 				Timeout:            10,
 				HealthyThreshold:   3,
@@ -3534,8 +3430,9 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "traffic-port",
-				Protocol:           elbv2.ProtocolEnumTcp,
+				Port:               "10256",
+				Protocol:           elbv2.ProtocolEnumHttp,
+				Path:               "/healthz",
 				Interval:           23,
 				Timeout:            10,
 				HealthyThreshold:   3,
@@ -3592,8 +3489,9 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 				},
 			},
 			want: healthCheckConfig{
-				Port:               "traffic-port",
-				Protocol:           elbv2.ProtocolEnumTcp,
+				Port:               "10256",
+				Protocol:           elbv2.ProtocolEnumHttp,
+				Path:               "/healthz",
 				Interval:           30,
 				Timeout:            10,
 				HealthyThreshold:   7,
@@ -3605,14 +3503,7 @@ func TestCloud_buildNLBHealthCheckConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Cloud{
-				cfg: &config.CloudConfig{},
-			}
-
-			if tt.modifyConfig != nil {
-				tt.modifyConfig(c.cfg)
-			}
-
+			c := &Cloud{}
 			hc, err := c.buildNLBHealthCheckConfiguration(tt.service)
 			if !tt.wantError {
 				assert.Equal(t, tt.want, hc)
