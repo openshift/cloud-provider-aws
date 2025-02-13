@@ -27,10 +27,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ecr"
-	"github.com/aws/aws-sdk-go-v2/service/ecrpublic"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ecr"
+	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/spf13/cobra"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,16 +42,16 @@ import (
 const ecrPublicRegion string = "us-east-1"
 const ecrPublicHost string = "public.ecr.aws"
 
-var ecrPrivateHostPattern = regexp.MustCompile(`^(\d{12})\.dkr[\.\-]ecr(\-fips)?\.([a-zA-Z0-9][a-zA-Z0-9-_]*)\.(amazonaws\.com(?:\.cn)?|on\.(?:aws|amazonwebservices\.com\.cn)|sc2s\.sgov\.gov|c2s\.ic\.gov|cloud\.adc-e\.uk|csp\.hci\.ic\.gov)$`)
+var ecrPrivateHostPattern = regexp.MustCompile(`^(\d{12})\.dkr\.ecr(\-fips)?\.([a-zA-Z0-9][a-zA-Z0-9-_]*)\.(amazonaws\.com(\.cn)?|sc2s\.sgov\.gov|c2s\.ic\.gov|cloud\.adc-e\.uk|csp\.hci\.ic\.gov)$`)
 
 // ECR abstracts the calls we make to aws-sdk for testing purposes
 type ECR interface {
-	GetAuthorizationToken(ctx context.Context, params *ecr.GetAuthorizationTokenInput, optFns ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
+	GetAuthorizationToken(input *ecr.GetAuthorizationTokenInput) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
 // ECRPublic abstracts the calls we make to aws-sdk for testing purposes
 type ECRPublic interface {
-	GetAuthorizationToken(ctx context.Context, params *ecrpublic.GetAuthorizationTokenInput, optFns ...func(*ecrpublic.Options)) (*ecrpublic.GetAuthorizationTokenOutput, error)
+	GetAuthorizationToken(input *ecrpublic.GetAuthorizationTokenInput) (*ecrpublic.GetAuthorizationTokenOutput, error)
 }
 
 type ecrPlugin struct {
@@ -59,36 +59,35 @@ type ecrPlugin struct {
 	ecrPublic ECRPublic
 }
 
-func defaultECRProvider(ctx context.Context, region string) (ECR, error) {
-	var cfg aws.Config
-	var err error
+func defaultECRProvider(region string) (*ecr.ECR, error) {
+	cfg := aws.Config{}
 	if region != "" {
-		cfg, err = config.LoadDefaultConfig(ctx,
-			config.WithRegion(region),
-		)
-	} else {
 		klog.Warningf("No region found in the image reference, the default region will be used. Please refer to AWS SDK documentation for configuration purpose.")
-		cfg, err = config.LoadDefaultConfig(ctx)
+		cfg.Region = aws.String(region)
 	}
-
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            cfg,
+		SharedConfigState: session.SharedConfigEnable,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return ecr.NewFromConfig(cfg), nil
+	return ecr.New(sess), nil
 }
 
-func publicECRProvider(ctx context.Context) (ECRPublic, error) {
+func publicECRProvider() (*ecrpublic.ECRPublic, error) {
 	// ECR public registries are only in one region and only accessible from regions
 	// in the "aws" partition.
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(ecrPublicRegion),
-	)
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            aws.Config{Region: aws.String(ecrPublicRegion)},
+		SharedConfigState: session.SharedConfigEnable,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return ecrpublic.NewFromConfig(cfg), nil
+	return ecrpublic.New(sess), nil
 }
 
 type credsData struct {
@@ -96,18 +95,18 @@ type credsData struct {
 	expiresAt *time.Time
 }
 
-func (e *ecrPlugin) getPublicCredsData(ctx context.Context) (*credsData, error) {
+func (e *ecrPlugin) getPublicCredsData() (*credsData, error) {
 	klog.Infof("Getting creds for public registry")
 	var err error
 
 	if e.ecrPublic == nil {
-		e.ecrPublic, err = publicECRProvider(ctx)
+		e.ecrPublic, err = publicECRProvider()
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := e.ecrPublic.GetAuthorizationToken(ctx, &ecrpublic.GetAuthorizationTokenInput{})
+	output, err := e.ecrPublic.GetAuthorizationToken(&ecrpublic.GetAuthorizationTokenInput{})
 	if err != nil {
 		return nil, err
 	}
@@ -126,18 +125,18 @@ func (e *ecrPlugin) getPublicCredsData(ctx context.Context) (*credsData, error) 
 	}, nil
 }
 
-func (e *ecrPlugin) getPrivateCredsData(ctx context.Context, imageHost string, image string) (*credsData, error) {
+func (e *ecrPlugin) getPrivateCredsData(imageHost string, image string) (*credsData, error) {
 	klog.Infof("Getting creds for private image %s", image)
 	var err error
 
 	if e.ecr == nil {
 		region := parseRegionFromECRPrivateHost(imageHost)
-		e.ecr, err = defaultECRProvider(ctx, region)
+		e.ecr, err = defaultECRProvider(region)
 		if err != nil {
 			return nil, err
 		}
 	}
-	output, err := e.ecr.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
+	output, err := e.ecr.GetAuthorizationToken(&ecr.GetAuthorizationTokenInput{})
 	if err != nil {
 		return nil, err
 	}
@@ -163,9 +162,9 @@ func (e *ecrPlugin) GetCredentials(ctx context.Context, image string, args []str
 	}
 
 	if imageHost == ecrPublicHost {
-		creds, err = e.getPublicCredsData(ctx)
+		creds, err = e.getPublicCredsData()
 	} else {
-		creds, err = e.getPrivateCredsData(ctx, imageHost, image)
+		creds, err = e.getPrivateCredsData(imageHost, image)
 	}
 
 	if err != nil {
@@ -176,7 +175,7 @@ func (e *ecrPlugin) GetCredentials(ctx context.Context, image string, args []str
 		return nil, errors.New("authorization token in response was nil")
 	}
 
-	decodedToken, err := base64.StdEncoding.DecodeString(aws.ToString(creds.authToken))
+	decodedToken, err := base64.StdEncoding.DecodeString(aws.StringValue(creds.authToken))
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +233,7 @@ func parseHostFromImageReference(image string) (string, error) {
 
 func parseRegionFromECRPrivateHost(host string) string {
 	splitHost := ecrPrivateHostPattern.FindStringSubmatch(host)
-	if len(splitHost) != 5 {
+	if len(splitHost) != 6 {
 		return ""
 	}
 	return splitHost[3]
