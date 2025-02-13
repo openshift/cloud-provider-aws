@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	stscredsv2 "github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -35,6 +34,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elbv2"
@@ -61,8 +61,6 @@ import (
 	"k8s.io/cloud-provider-aws/pkg/providers/v1/iface"
 	"k8s.io/cloud-provider-aws/pkg/providers/v1/variant"
 	_ "k8s.io/cloud-provider-aws/pkg/providers/v1/variant/fargate" // ensure the fargate variant gets registered
-	"k8s.io/cloud-provider-aws/pkg/resourcemanagers"
-	"k8s.io/cloud-provider-aws/pkg/services"
 )
 
 // NLBHealthCheckRuleDescription is the comment used on a security group rule to
@@ -290,6 +288,7 @@ type Services interface {
 	Compute(region string) (iface.EC2, error)
 	LoadBalancing(region string) (ELB, error)
 	LoadBalancingV2(region string) (ELBV2, error)
+	Autoscaling(region string) (ASG, error)
 	Metadata() (config.EC2Metadata, error)
 	KeyManagement(region string) (KMS, error)
 }
@@ -353,6 +352,13 @@ type ELBV2 interface {
 	WaitUntilLoadBalancersDeleted(*elbv2.DescribeLoadBalancersInput) error
 }
 
+// ASG is a simple pass-through of the Autoscaling client interface, which
+// allows for testing.
+type ASG interface {
+	UpdateAutoScalingGroup(*autoscaling.UpdateAutoScalingGroupInput) (*autoscaling.UpdateAutoScalingGroupOutput, error)
+	DescribeAutoScalingGroups(*autoscaling.DescribeAutoScalingGroupsInput) (*autoscaling.DescribeAutoScalingGroupsOutput, error)
+}
+
 // KMS is a simple pass-through of the Key Management Service client interface,
 // which allows for testing.
 type KMS interface {
@@ -370,6 +376,7 @@ type Cloud struct {
 	ec2      iface.EC2
 	elb      ELB
 	elbv2    ELBV2
+	asg      ASG
 	kms      KMS
 	metadata config.EC2Metadata
 	cfg      *config.CloudConfig
@@ -382,9 +389,8 @@ type Cloud struct {
 	// Note that we cache some state in awsInstance (mountpoints), so we must preserve the instance
 	selfAWSInstance *awsInstance
 
-	instanceCache           instanceCache
-	zoneCache               zoneCache
-	instanceTopologyManager resourcemanagers.InstanceTopologyManager
+	instanceCache instanceCache
+	zoneCache     zoneCache
 
 	clientBuilder cloudprovider.ControllerClientBuilder
 	kubeClient    clientset.Interface
@@ -455,7 +461,6 @@ func (c *Cloud) CurrentNodeName(ctx context.Context, hostname string) (types.Nod
 func init() {
 	registerMetrics()
 	cloudprovider.RegisterCloudProvider(ProviderName, func(config io.Reader) (cloudprovider.Interface, error) {
-		ctx := context.Background()
 		cfg, err := readAWSCloudConfig(config)
 		if err != nil {
 			return nil, fmt.Errorf("unable to read AWS cloud provider config file: %v", err)
@@ -484,7 +489,6 @@ func init() {
 		}
 
 		var creds *credentials.Credentials
-		var credsV2 *stscredsv2.AssumeRoleProvider
 		if cfg.Global.RoleARN != "" {
 			stsClient, err := getSTSClient(sess, cfg.Global.RoleARN, cfg.Global.SourceARN)
 			if err != nil {
@@ -498,16 +502,10 @@ func init() {
 						RoleARN: cfg.Global.RoleARN,
 					}),
 				})
-
-			stsClientv2, err := services.NewStsV2Client(ctx, regionName, cfg.Global.RoleARN, cfg.Global.SourceARN)
-			if err != nil {
-				return nil, fmt.Errorf("unable to create sts v2 client: %v", err)
-			}
-			credsV2 = stscredsv2.NewAssumeRoleProvider(stsClientv2, cfg.Global.RoleARN)
 		}
 
 		aws := newAWSSDKProvider(creds, cfg)
-		return newAWSCloud2(*cfg, aws, aws, creds, credsV2)
+		return newAWSCloud2(*cfg, aws, aws, creds)
 	})
 }
 
@@ -563,13 +561,12 @@ func azToRegion(az string) (string, error) {
 }
 
 func newAWSCloud(cfg config.CloudConfig, awsServices Services) (*Cloud, error) {
-	return newAWSCloud2(cfg, awsServices, nil, nil, nil)
+	return newAWSCloud2(cfg, awsServices, nil, nil)
 }
 
 // newAWSCloud creates a new instance of AWSCloud.
 // AWSProvider and instanceId are primarily for tests
-func newAWSCloud2(cfg config.CloudConfig, awsServices Services, provider config.SDKProvider, credentials *credentials.Credentials, credentialsV2 *stscredsv2.AssumeRoleProvider) (*Cloud, error) {
-	ctx := context.Background()
+func newAWSCloud2(cfg config.CloudConfig, awsServices Services, provider config.SDKProvider, credentials *credentials.Credentials) (*Cloud, error) {
 	// We have some state in the Cloud object
 	// Log so that if we are building multiple Cloud objects, it is obvious!
 	klog.Infof("Building AWS cloudprovider")
@@ -589,11 +586,6 @@ func newAWSCloud2(cfg config.CloudConfig, awsServices Services, provider config.
 		return nil, fmt.Errorf("error creating AWS EC2 client: %v", err)
 	}
 
-	ec2v2, err := services.NewEc2SdkV2(ctx, regionName, credentialsV2)
-	if err != nil {
-		return nil, fmt.Errorf("error creating AWS EC2v2 client: %v", err)
-	}
-
 	elb, err := awsServices.LoadBalancing(regionName)
 	if err != nil {
 		return nil, fmt.Errorf("error creating AWS ELB client: %v", err)
@@ -602,6 +594,11 @@ func newAWSCloud2(cfg config.CloudConfig, awsServices Services, provider config.
 	elbv2, err := awsServices.LoadBalancingV2(regionName)
 	if err != nil {
 		return nil, fmt.Errorf("error creating AWS ELBV2 client: %v", err)
+	}
+
+	asg, err := awsServices.Autoscaling(regionName)
+	if err != nil {
+		return nil, fmt.Errorf("error creating AWS autoscaling client: %v", err)
 	}
 
 	kms, err := awsServices.KeyManagement(regionName)
@@ -613,6 +610,7 @@ func newAWSCloud2(cfg config.CloudConfig, awsServices Services, provider config.
 		ec2:      ec2,
 		elb:      elb,
 		elbv2:    elbv2,
+		asg:      asg,
 		metadata: metadata,
 		kms:      kms,
 		cfg:      &cfg,
@@ -620,7 +618,6 @@ func newAWSCloud2(cfg config.CloudConfig, awsServices Services, provider config.
 	}
 	awsCloud.instanceCache.cloud = awsCloud
 	awsCloud.zoneCache.cloud = awsCloud
-	awsCloud.instanceTopologyManager = resourcemanagers.NewInstanceTopologyManager(ec2v2)
 
 	tagged := cfg.Global.KubernetesClusterTag != "" || cfg.Global.KubernetesClusterID != ""
 	if cfg.Global.VPC != "" && (cfg.Global.SubnetID != "" || cfg.Global.RoleARN != "") && tagged {
@@ -2084,43 +2081,31 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 		}
 	}
 
-	if parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol) {
+	var pathModified bool
+	protocolModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckProtocol, &hc.Protocol)
+	if protocolModified {
 		hc.Protocol = strings.ToUpper(hc.Protocol)
 	}
+
 	switch hc.Protocol {
 	case elbv2.ProtocolEnumHttp, elbv2.ProtocolEnumHttps:
-		parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
+		pathModified = parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPath, &hc.Path)
 	case elbv2.ProtocolEnumTcp:
 		hc.Path = ""
 	default:
 		return healthCheckConfig{}, fmt.Errorf("Unsupported health check protocol %v", hc.Protocol)
 	}
 
-	parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
+	portModified := parseStringAnnotation(svc.Annotations, ServiceAnnotationLoadBalancerHealthCheckPort, &hc.Port)
 
-	switch c.cfg.Global.ClusterServiceLoadBalancerHealthProbeMode {
-	case config.ClusterServiceLoadBalancerHealthProbeModeShared:
-		// For a non-local service, we override the health check to use the kube-proxy port when no other overrides are provided.
-		// The kube-proxy port should be open on all nodes and allows the health check to check the nodes ability to proxy traffic.
-		// When the node is shutting down, the health check should fail before the node loses the ability to route traffic to the backend pod.
-		// This allows the load balancer to gracefully drain connections from the node.
-		if svc.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyTypeLocal {
-			hc.Path = defaultKubeProxyHealthCheckPath
-			if c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePath != "" {
-				hc.Path = c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePath
-			}
-
-			hc.Port = strconv.Itoa(int(defaultKubeProxyHealthCheckPort))
-			if c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePort != 0 {
-				hc.Port = strconv.Itoa(int(c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePort))
-			}
-
-			hc.Protocol = elbv2.ProtocolEnumHttp
-		}
-	case config.ClusterServiceLoadBalancerHealthProbeModeServiceNodePort, "":
-		// Configuration is already up to date as this is the default case.
-	default:
-		return healthCheckConfig{}, fmt.Errorf("Unsupported ClusterServiceLoadBalancerHealthProbeMode %v", c.cfg.Global.ClusterServiceLoadBalancerHealthProbeMode)
+	// For a non-local service, we override the health check to use the kube-proxy port when no other overrides are provided.
+	// The kube-proxy port should be open on all nodes and allows the health check to check the nodes ability to proxy traffic.
+	// When the node is shutting down, the health check should fail before the node loses the ability to route traffic to the backend pod.
+	// This allows the load balancer to gracefully drain connections from the node.
+	if svc.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyTypeLocal && !(pathModified || portModified || protocolModified) {
+		hc.Port = kubeProxyHealthCheckPort
+		hc.Path = kubeProxyHealthCheckPath
+		hc.Protocol = elbv2.ProtocolEnumHttp
 	}
 
 	if _, err := parseInt64Annotation(svc.Annotations, ServiceAnnotationLoadBalancerHCInterval, &hc.Interval); err != nil {
@@ -2521,33 +2506,9 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 	} else {
 		klog.V(4).Infof("service %v does not need custom health checks", apiService.Name)
-		var hcPath string
-		hcPort := tcpHealthCheckPort
 
-		annotationProtocol := strings.ToLower(annotations[ServiceAnnotationLoadBalancerBEProtocol])
-		var hcProtocol string
-		if annotationProtocol == "https" || annotationProtocol == "ssl" {
-			hcProtocol = "SSL"
-		} else {
-			hcProtocol = "TCP"
-		}
-
-		if c.cfg.Global.ClusterServiceLoadBalancerHealthProbeMode == config.ClusterServiceLoadBalancerHealthProbeModeShared {
-			// Use the kube-proxy port as the health check port for non-local services.
-			hcProtocol = "HTTP"
-			hcPath = defaultKubeProxyHealthCheckPath
-			hcPort = int32(defaultKubeProxyHealthCheckPort)
-
-			if c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePath != "" {
-				hcPath = c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePath
-			}
-
-			if c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePort != 0 {
-				hcPort = c.cfg.Global.ClusterServiceSharedLoadBalancerHealthProbePort
-			}
-		}
-
-		err = c.ensureLoadBalancerHealthCheck(loadBalancer, hcProtocol, hcPort, hcPath, annotations)
+		// Use the kube-proxy port as the health check port for non-local services.
+		err = c.ensureLoadBalancerHealthCheck(loadBalancer, "HTTP", kubeProxyHealthCheckPortInt, kubeProxyHealthCheckPath, annotations)
 		if err != nil {
 			return nil, err
 		}
