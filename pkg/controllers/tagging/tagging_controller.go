@@ -101,6 +101,7 @@ type Controller struct {
 	resources []string
 
 	rateLimitEnabled bool
+	workerCount      int
 }
 
 // NewTaggingController creates a NewTaggingController object
@@ -112,7 +113,8 @@ func NewTaggingController(
 	tags map[string]string,
 	resources []string,
 	rateLimit float64,
-	burstLimit int) (*Controller, error) {
+	burstLimit int,
+	workerCount int) (*Controller, error) {
 
 	awsCloud, ok := cloud.(*awsv1.Cloud)
 	if !ok {
@@ -149,6 +151,7 @@ func NewTaggingController(
 		nodesSynced:       nodeInformer.Informer().HasSynced,
 		nodeMonitorPeriod: nodeMonitorPeriod,
 		rateLimitEnabled:  rateLimitEnabled,
+		workerCount:       workerCount,
 	}
 
 	// Use shared informer to listen to add/update/delete of nodes. Note that any nodes
@@ -194,7 +197,9 @@ func (tc *Controller) Run(stopCh <-chan struct{}) {
 	}
 
 	klog.Infof("Starting the tagging controller")
-	go wait.Until(tc.work, tc.nodeMonitorPeriod, stopCh)
+	for i := 0; i < tc.workerCount; i++ {
+		go wait.Until(tc.work, tc.nodeMonitorPeriod, stopCh)
+	}
 
 	<-stopCh
 }
@@ -342,6 +347,10 @@ func (tc *Controller) tagEc2Instance(node *v1.Node) error {
 
 	klog.Infof("Successfully labeled node %s with %v.", node.GetName(), labels)
 
+	if tc.isInitialTag(node) {
+		initialNodeTaggingDelay.Observe(time.Since(node.CreationTimestamp.Time).Seconds())
+	}
+
 	return nil
 }
 
@@ -396,6 +405,11 @@ func (tc *Controller) enqueueNode(node *v1.Node, action string) {
 		tc.workqueue.Add(item)
 		klog.Infof("Added %s to the workqueue (without any rate-limit)", item)
 	}
+}
+
+func (tc *Controller) isInitialTag(node *v1.Node) bool {
+	_, ok := node.Labels[taggingControllerLabelKey]
+	return !ok
 }
 
 func (tc *Controller) isTaggingRequired(node *v1.Node) bool {
