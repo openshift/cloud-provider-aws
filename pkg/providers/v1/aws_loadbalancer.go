@@ -141,7 +141,7 @@ func getKeyValuePropertiesFromAnnotation(annotations map[string]string, annotati
 }
 
 // ensureLoadBalancerv2 ensures a v2 load balancer is created
-func (c *Cloud) ensureLoadBalancerv2(namespacedName types.NamespacedName, loadBalancerName string, mappings []nlbPortMapping, instanceIDs, discoveredSubnetIDs []string, internalELB bool, annotations map[string]string) (*elbv2.LoadBalancer, error) {
+func (c *Cloud) ensureLoadBalancerv2(namespacedName types.NamespacedName, loadBalancerName string, mappings []nlbPortMapping, instanceIDs, discoveredSubnetIDs []string, internalELB bool, annotations map[string]string, securityGroups []*string) (*elbv2.LoadBalancer, error) {
 	loadBalancer, err := c.describeLoadBalancerv2(loadBalancerName)
 	if err != nil {
 		return nil, err
@@ -172,10 +172,12 @@ func (c *Cloud) ensureLoadBalancerv2(namespacedName types.NamespacedName, loadBa
 				return nil, fmt.Errorf("error creating load balancer: Must have same number of EIP AllocationIDs (%d) and SubnetIDs (%d)", len(allocationIDs), len(discoveredSubnetIDs))
 			}
 		}
-
 		// We are supposed to specify one subnet per AZ.
 		// TODO: What happens if we have more than one subnet per AZ?
 		createRequest.SubnetMappings = createSubnetMappings(discoveredSubnetIDs, allocationIDs)
+
+		// Enable provisioning NLB with security groups when the annotation(s) are set.
+		createRequest.SecurityGroups = securityGroups
 
 		for k, v := range tags {
 			createRequest.Tags = append(createRequest.Tags, &elbv2.Tag{
@@ -397,6 +399,55 @@ func (c *Cloud) ensureLoadBalancerv2(namespacedName types.NamespacedName, loadBa
 		}
 	}
 	return loadBalancer, nil
+}
+
+// getSecurityGroupIDsFromAnnotations retrieves the Security Group IDs based on user-provided security group annotations.
+// If the user provides a Security Group Name, it is resolved and translated to its corresponding ID.
+func (c *Cloud) getSecurityGroupIDsFromList(securityGroups []string) ([]*string, error) {
+	groupIDs := []*string{}
+	if len(securityGroups) == 0 {
+		return groupIDs, nil
+	}
+
+	klog.Infof("Setting up NLB with Security Groups: %v", securityGroups)
+
+	// discoverying security group IDs
+	sgNames := []string{}
+	for _, sg := range securityGroups {
+		if strings.HasPrefix(sg, "sg-") {
+			groupIDs = append(groupIDs, aws.String(sg))
+			continue
+		}
+		sgNames = append(sgNames, sg)
+	}
+	if len(sgNames) == 0 && len(groupIDs) == 0 {
+		return nil, fmt.Errorf("unable to extract security groups from annotation %q: %w", ServiceAnnotationLoadBalancerSecurityGroups, securityGroups)
+	}
+	// No names to discover IDs, just return the discovered IDs
+	if len(sgNames) == 0 {
+		return groupIDs, nil
+	}
+
+	// Discover IDs from names
+	// describeRequest :=
+	securityGroupsWithIDs, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+		Filters: []*ec2.Filter{
+			newEc2Filter("group-name", sgNames[0]),
+			newEc2Filter("vpc-id", c.vpcID),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, sg := range securityGroupsWithIDs {
+		groupIDs = append(groupIDs, sg.GroupId)
+	}
+
+	if len(groupIDs) == 0 {
+		return nil, fmt.Errorf("no security groups found in VPC %q to satisfy annotation %q: %w", c.vpcID, ServiceAnnotationLoadBalancerSecurityGroups, securityGroups)
+	}
+
+	return groupIDs, nil
 }
 
 func (c *Cloud) reconcileLBAttributes(loadBalancerArn string, annotations map[string]string) error {
@@ -989,7 +1040,6 @@ func (c *Cloud) ensureLoadBalancer(namespacedName types.NamespacedName, loadBala
 		if internalELB {
 			createRequest.Scheme = aws.String("internal")
 		}
-
 		// We are supposed to specify one subnet per AZ.
 		// TODO: What happens if we have more than one subnet per AZ?
 		if subnetIDs == nil {
