@@ -2179,11 +2179,37 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 	return hc, nil
 }
 
+// createSecurityGroupRulesForNLB creates and configures security group rules for a Network Load Balancer (NLB).
+//
+// This function sets up ingress and egress rules for the specified security group (sgID) based on the provided
+// port mappings and source IP ranges. It removes any default egress rules before applying the new rules.
+//
+// Parameters:
+//   - sgID: The ID of the security group to configure.
+//   - ports: A slice of nlbPortMapping objects that define the port mappings for the NLB.
+//   - ec2SourceRanges: A slice of *ec2.IpRange objects specifying the source IP ranges for the rules.
+//
+// Returns:
+//   - error: An error if any issue occurs while creating or applying the security group rules.
+//
+// The function performs the following steps:
+//  1. Removes all default egress rules for the specified security group.
+//  2. Iterates over the provided port mappings to create ingress and egress rules.
+//  3. Configures health check-specific egress rules if the health check configuration differs from the traffic configuration.
+//  4. Applies the generated ingress and egress rules to the security group.
+//
+// Errors are returned if there are issues with removing default rules, parsing health check ports, or applying the new rules.
 func (c *Cloud) createSecurityGroupRulesForNLB(sgID string, ports []nlbPortMapping, ec2SourceRanges []*ec2.IpRange) error {
 	ingressRules := IPPermissionSet{}
 	egressRules := IPPermissionSet{}
 
-	// TODO do we need to clean up the default egress rule?
+	// Remove all default egress rules.
+	if _, err := c.setSecurityGroupIngress(sgID, IPPermissionSet{"default": &ec2.IpPermission{
+		IpProtocol: aws.String("-1"),
+		IpRanges:   []*ec2.IpRange{{CidrIp: aws.String("0.0.0.0/0")}},
+	}}, true); err != nil {
+		return fmt.Errorf("removing default egress rules for security group %q: %w", sgID, err)
+	}
 
 	for _, mapping := range ports {
 		// create ingress permissions: iteract over Load Balancer Listener mappings to create ingress rules
@@ -2195,32 +2221,35 @@ func (c *Cloud) createSecurityGroupRulesForNLB(sgID string, ports []nlbPortMappi
 		})
 
 		// create egress permissions: iteract over port mapping to build the ingress and egress rules
-		egressRules.Insert(&ec2.IpPermission{
+		egressRule := &ec2.IpPermission{
 			FromPort:   aws.Int64(int64(mapping.TrafficPort)),
 			ToPort:     aws.Int64(int64(mapping.TrafficPort)),
 			IpProtocol: aws.String(strings.ToLower(string((mapping.TrafficProtocol)))),
 			IpRanges:   ec2SourceRanges,
-		})
-		// service ports are different than
+		}
+		// service ports are different than health check.
 		if mapping.HealthCheckConfig.Port != fmt.Sprintf("%d", mapping.TrafficPort) ||
 			mapping.HealthCheckConfig.Protocol != strings.ToLower(string((mapping.TrafficProtocol))) {
 			healthCheckPort, err := strconv.ParseInt(mapping.HealthCheckConfig.Port, 10, 64)
 			if err != nil {
 				return fmt.Errorf("error building security group rules: invalid health check port '%v': %v", mapping.HealthCheckConfig.Port, err)
 			}
-			egressRules.Insert(&ec2.IpPermission{
+			egressRule = &ec2.IpPermission{
 				FromPort:   aws.Int64(healthCheckPort),
 				ToPort:     aws.Int64(healthCheckPort),
 				IpProtocol: aws.String(strings.ToLower(string((mapping.HealthCheckConfig.Protocol)))),
 				IpRanges:   ec2SourceRanges,
-			})
+			}
 		}
+		egressRules.Insert(egressRule)
 	}
 
+	// Setup ingress rules
 	if _, err := c.setSecurityGroupIngress(sgID, ingressRules, false); err != nil {
 		return fmt.Errorf("creating ingress rules for security group %q: %w", sgID, err)
 	}
-	if _, err := c.setSecurityGroupIngress(sgID, ingressRules, true); err != nil {
+	// Setup egress rules
+	if _, err := c.setSecurityGroupIngress(sgID, egressRules, true); err != nil {
 		return fmt.Errorf("creating ingress rules for security group %q: %w", sgID, err)
 	}
 	return nil
@@ -2344,24 +2373,27 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 
 		// Enable Creating NLB with Security Groups.
 		// Create NLB with security group support only when one of the following annotations is added:
-		// unmanaged security group (BYO SG): ServiceAnnotationLoadBalancerSecurityGroups (Enhancement Option 1)
-		// managed security group: ServiceAnnotationLoadBalancerManagedSecurityGroup (Enhancement Option 2)
+		// ServiceAnnotationLoadBalancerManagedSecurityGroup: managed security group. CCM creates and manage SG for NLB.
 		securityGroups := []*string{}
-		unmanagedSecurityGroup := true
-		groupList, _, err := c.buildELBSecurityGroupList(serviceName, loadBalancerName, annotations, unmanagedSecurityGroup)
-		if err != nil {
-			return nil, fmt.Errorf("unable to retrieve Security Group from annotations: %w", err)
-		}
-		if len(groupList) == 0 {
-			unmanagedSecurityGroup = false
-		}
 		if managedValue, present := annotations[ServiceAnnotationLoadBalancerManagedSecurityGroup]; present { // managed
 			if managedValue != "true" {
 				return nil, fmt.Errorf("invalid value for annotation %q: %s. valid value: 'true'", ServiceAnnotationLoadBalancerManagedSecurityGroup, managedValue)
 			}
-			// annotation conflict
-			if unmanagedSecurityGroup {
-				return nil, fmt.Errorf("annotation conflict: managed security group and security groups list are mtual exclusive: %v", groupList)
+			// annotation conflict - don't support unmanaged/BYO path on NLB
+			// TODO: this would be overscoped in OCP feature, and it's not required for short-term.
+			// TODO/TBD: do we need to support BYO SG for NLBs? Would it be supported with ManagedSecurityGroup annotation?
+			unmanagedSecurityGroup := true
+			{
+				groupList, _, err := c.buildELBSecurityGroupList(serviceName, loadBalancerName, annotations, unmanagedSecurityGroup)
+				if err != nil {
+					return nil, fmt.Errorf("unable to retrieve Security Group from annotations: %w", err)
+				}
+				if len(groupList) == 0 {
+					unmanagedSecurityGroup = false
+				}
+				if unmanagedSecurityGroup {
+					return nil, fmt.Errorf("annotation conflict: managed security group and security groups list are mtual exclusive: %v", groupList)
+				}
 			}
 
 			// build the list with CCM-created SG
@@ -2380,12 +2412,6 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 				if err := c.createSecurityGroupRulesForNLB(groupList[0], v2Mappings, ec2SourceRanges); err != nil {
 					return nil, fmt.Errorf("security group created for NLB is expected to prefix with sg-, got: %q", groupList[0])
 				}
-			}
-		} else if len(groupList) > 0 { // unmanaged
-			// ensuring translating security names to ID, when there are.
-			securityGroups, err = c.getSecurityGroupIDsFromList(groupList)
-			if err != nil {
-				return nil, fmt.Errorf("unable to get the list of security group IDs: %w", err)
 			}
 		}
 
@@ -3028,45 +3054,49 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			}
 		}
 
-		// Ensure instance security groups are deleted.
 		err = c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("error deleting instance security group rules: %w", err)
 		}
 
-		// Do nothing if there is not shared annotation.
+		// Do nothing if there is no Security Group managed annotation.
 		if managedValue, present := service.Annotations[ServiceAnnotationLoadBalancerManagedSecurityGroup]; !present || managedValue != "true" {
 			return nil
 		}
 
-		// Delete the security group if it is managed by CCM
-		tagClusterID := TagNameKubernetesClusterPrefix + c.tagging.ClusterID
-		describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-			Filters: []*ec2.Filter{
-				{
-					Name:   aws.String("tag:Name"),
-					Values: aws.StringSlice([]string{loadBalancerName}),
+		// Ensure instance security groups are deleted when managed.
+		{
+			// Delete the security group if it is managed by CCM
+			tagClusterID := TagNameKubernetesClusterPrefix + c.tagging.ClusterID
+			describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+				Filters: []*ec2.Filter{
+					{
+						Name:   aws.String("tag:Name"),
+						Values: aws.StringSlice([]string{loadBalancerName}),
+					},
 				},
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("error describing security group of deleted LB: %w", err)
-		}
-		if len(describeResponse) == 0 {
-			klog.V(3).Infof("No security groups matching the Load Balancer Name to be deleted: %d", len(describeResponse))
-		}
-		for _, sgID := range describeResponse {
-			if sgID != nil && c.tagging.hasClusterTag(sgID.Tags) {
-				klog.V(2).Infof("Deleting managed security group: %s", aws.StringValue(sgID.GroupId))
-				if _, err := c.ec2.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{GroupId: sgID.GroupId}); err != nil {
-					return fmt.Errorf("error deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
+			})
+			if err != nil {
+				return fmt.Errorf("error describing security group of deleted LB: %w", err)
+			}
+			if len(describeResponse) == 0 {
+				klog.V(3).Infof("No security groups matching the Load Balancer Name to be deleted: %d", len(describeResponse))
+				return nil
+			}
+			for _, sgID := range describeResponse {
+				if sgID != nil && c.tagging.hasClusterTag(sgID.Tags) {
+					klog.V(2).Infof("Deleting managed security group: %s", aws.StringValue(sgID.GroupId))
+					if _, err := c.ec2.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{GroupId: sgID.GroupId}); err != nil {
+						return fmt.Errorf("error deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
+					}
+				} else {
+					klog.V(3).Infof("Skipping security group %q delettion as cluster tag does not match with %q", aws.StringValue(sgID.GroupId), tagClusterID)
 				}
-			} else {
-				klog.V(3).Infof("Skipping security group %q delettion as cluster tag does not match with %q", aws.StringValue(sgID.GroupId), tagClusterID)
 			}
 		}
 
-		return c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
+		// return c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
+		return nil
 	}
 
 	lb, err := c.describeLoadBalancer(loadBalancerName)
