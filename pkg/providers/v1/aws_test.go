@@ -2063,7 +2063,7 @@ func TestLBExtraSecurityGroupsAnnotation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			serviceName := types.NamespacedName{Namespace: "default", Name: "myservice"}
 
-			sgList, setupSg, err := c.buildELBSecurityGroupList(serviceName, "aid", test.annotations)
+			sgList, setupSg, err := c.buildELBSecurityGroupList(serviceName, "aid", test.annotations, false)
 			assert.NoError(t, err, "buildELBSecurityGroupList failed")
 			extraSGs := sgList[1:]
 			assert.True(t, sets.NewString(test.expectedSGs...).Equal(sets.NewString(extraSGs...)),
@@ -2097,11 +2097,62 @@ func TestLBSecurityGroupsAnnotation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			serviceName := types.NamespacedName{Namespace: "default", Name: "myservice"}
 
-			sgList, setupSg, err := c.buildELBSecurityGroupList(serviceName, "aid", test.annotations)
+			sgList, setupSg, err := c.buildELBSecurityGroupList(serviceName, "aid", test.annotations, false)
 			assert.NoError(t, err, "buildELBSecurityGroupList failed")
 			assert.True(t, sets.NewString(test.expectedSGs...).Equal(sets.NewString(sgList...)),
 				"Security Groups expected=%q , returned=%q", test.expectedSGs, sgList)
 			assert.False(t, setupSg, "Security Groups Setup Permissions Flag expected=%t , returned=%t", false, setupSg)
+		})
+	}
+}
+
+func TestLBManagedSecurityGroupAnnotation(t *testing.T) {
+	awsServices := newMockedFakeAWSServices(TestClusterID)
+	c, _ := newAWSCloud(config.CloudConfig{}, awsServices)
+
+	loadBalancerName := "nlbsg"
+	managed := map[string]string{ServiceAnnotationLoadBalancerManagedSecurityGroup: "true"}
+	managedSG := "k8s-elb-" + loadBalancerName
+	unmanaged := map[string]string{ServiceAnnotationLoadBalancerManagedSecurityGroup: "false"}
+
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		skipDefault bool
+		expectedSGs []string
+		wantSetupSG bool
+	}{
+		{
+			"No NLB Managed SG", map[string]string{}, false, []string{}, true,
+		},
+		{
+			"NLB Managed SG specified true skipDefault", managed, true, []string{}, false,
+		},
+		{
+			"NLB Managed SG specified true", managed, false, []string{managedSG}, true,
+		},
+		{
+			"NLB Managed SG specified false", unmanaged, true, []string{}, false,
+		},
+		{
+			"NLB Managed SG specified true with securityGroupLabels", managed, true, []string{}, false,
+		},
+		{
+			"NLB Managed SG specified true with extra securityGroupLabels", managed, true, []string{}, false,
+		},
+	}
+
+	awsServices.ec2.(*MockedFakeEC2).expectDescribeSecurityGroups(TestClusterID, managedSG)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			serviceName := types.NamespacedName{Namespace: "default", Name: "myservice"}
+
+			sgList, setupSg, err := c.buildELBSecurityGroupList(serviceName, loadBalancerName, test.annotations, test.skipDefault)
+			assert.NoError(t, err, "buildELBSecurityGroupList failed")
+			assert.True(t, sets.NewString(test.expectedSGs...).Equal(sets.NewString(sgList...)),
+				"Security Groups expected=%q , returned=%q", test.expectedSGs, sgList)
+			assert.False(t, setupSg, "Security Groups Setup Permissions Flag expected=%t , returned=%t", test.wantSetupSG, setupSg)
 		})
 	}
 }

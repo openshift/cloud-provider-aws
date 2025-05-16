@@ -3071,27 +3071,33 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 		{
 			klog.V(3).Infof("EnsureLoadBalancerDeleted...")
 			klog.Warningf("EnsureLoadBalancerDeleted....")
+			klog.Warningf("EnsureLoadBalancerDeleted - loadBalancerName: %s", loadBalancerName)
+
 			// Delete the security group if it is managed by CCM
 			tagClusterID := TagNameKubernetesClusterPrefix + c.tagging.ClusterID
-			describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-				Filters: []*ec2.Filter{
-					{
-						Name:   aws.String("tag:Name"),
-						Values: aws.StringSlice([]string{loadBalancerName}),
-					},
-				},
-			})
 			klog.Warningf("EnsureLoadBalancerDeleted - tagClusterID: %s", tagClusterID)
-			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse: %s", describeResponse)
+			klog.Warningf("EnsureLoadBalancerDeleted - lb.SecurityGroups: %v", lb.SecurityGroups)
+
+			describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+				// Filters: []*ec2.Filter{
+				// 	{
+				// 		Name:   aws.String("tag:Name"),
+				// 		Values: aws.StringSlice([]string{loadBalancerName}),
+				// 	},
+				// },
+				GroupIds: lb.SecurityGroups,
+			})
+			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse err: %v", err)
 			if err != nil {
 				return fmt.Errorf("error describing security group of deleted LB: %w", err)
 			}
-			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse: %s", describeResponse)
+			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse: %v", describeResponse)
 			klog.Warningf("EnsureLoadBalancerDeleted - len(describeResponse): %d", len(describeResponse))
 			if len(describeResponse) == 0 {
 				klog.V(3).Infof("No security groups matching the Load Balancer Name to be deleted: %d", len(describeResponse))
 				return nil
 			}
+
 			for _, sgID := range describeResponse {
 				if sgID != nil && c.tagging.hasClusterTag(sgID.Tags) {
 					klog.V(2).Infof("Deleting managed security group: %s", aws.StringValue(sgID.GroupId))

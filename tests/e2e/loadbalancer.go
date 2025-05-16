@@ -98,4 +98,64 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 		_, err = lbJig.WaitForLoadBalancerDestroy(ingressIP, svcPort, loadBalancerCreateTimeout)
 		framework.ExpectNoError(err)
 	})
+
+	It("should configure the loadbalancer type NLB with security groups", func() {
+		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(cs)
+		framework.Logf("Running tests against AWS with timeout %s", loadBalancerCreateTimeout)
+
+		serviceName := "lbconfig-test-nlb"
+		framework.Logf("namespace for load balancer conig test: %s", ns.Name)
+
+		By("creating a TCP service " + serviceName + " with type=LoadBalancerType in namespace " + ns.Name)
+		lbJig := e2eservice.NewTestJig(cs, ns.Name, serviceName)
+
+		serviceUpdateFunc := func(svc *v1.Service) {
+			annotations := make(map[string]string)
+			annotations["aws-load-balancer-backend-protocol"] = "http"
+			annotations["aws-load-balancer-ssl-ports"] = "https"
+			annotations["service.beta.kubernetes.io/aws-load-balancer-type"] = "nlb"
+			annotations["service.beta.kubernetes.io/aws-load-balancer-managed-security-group"] = "true"
+
+			svc.Annotations = annotations
+			svc.Spec.Ports = []v1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(80),
+					TargetPort: intstr.FromInt(80),
+				},
+				{
+					Name:       "https",
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(443),
+					TargetPort: intstr.FromInt(80),
+				},
+			}
+		}
+
+		lbService, err := lbJig.CreateLoadBalancerService(loadBalancerCreateTimeout, serviceUpdateFunc)
+		framework.ExpectNoError(err)
+
+		By("creating a pod to be part of the TCP service " + serviceName)
+		_, err = lbJig.Run(nil)
+		framework.ExpectNoError(err)
+
+		By("hitting the TCP service's LB External IP")
+		svcPort := int(lbService.Spec.Ports[0].Port)
+		ingressIP := e2eservice.GetIngressPoint(&lbService.Status.LoadBalancer.Ingress[0])
+		framework.Logf("Load balancer's ingress IP: %s", ingressIP)
+
+		e2eservice.TestReachableHTTP(ingressIP, svcPort, e2eservice.LoadBalancerLagTimeoutAWS)
+
+		// Update the service to cluster IP
+		By("changing TCP service back to type=ClusterIP")
+		_, err = lbJig.UpdateService(func(s *v1.Service) {
+			s.Spec.Type = v1.ServiceTypeClusterIP
+		})
+		framework.ExpectNoError(err)
+
+		// Wait for the load balancer to be destroyed asynchronously
+		_, err = lbJig.WaitForLoadBalancerDestroy(ingressIP, svcPort, loadBalancerCreateTimeout)
+		framework.ExpectNoError(err)
+	})
 })
