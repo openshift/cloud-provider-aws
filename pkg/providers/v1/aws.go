@@ -1369,7 +1369,7 @@ func (c *Cloud) setSecurityGroupIngress(securityGroupID string, permissions IPPe
 			request.IpPermissions = add.List()
 			// TODO check how to handle egress rules while AWS creats ALLOW ALL egress when SG is created.
 			// _, err = c.ec2.AuthorizeSecurityGroupEgress(request)
-			klog.V(2).Info("Skipping adding security group egress: %s %v", securityGroupID, remove.List())
+			klog.V(2).Infof("Skipping adding security group egress: %s %v", securityGroupID, remove.List())
 		} else {
 			request := &ec2.AuthorizeSecurityGroupIngressInput{}
 			request.GroupId = &securityGroupID
@@ -1389,7 +1389,7 @@ func (c *Cloud) setSecurityGroupIngress(securityGroupID string, permissions IPPe
 			request.IpPermissions = remove.List()
 			// TODO check how to handle egress rules while AWS creats ALLOW ALL egress when SG is created.
 			// _, err = c.ec2.RevokeSecurityGroupEgress(request)
-			klog.V(2).Info("Skipping remove security group egress: %s %v", securityGroupID, remove.List())
+			klog.V(2).Infof("Skipping remove security group egress: %s %v", securityGroupID, remove.List())
 		} else {
 			request := &ec2.RevokeSecurityGroupIngressInput{}
 			request.GroupId = &securityGroupID
@@ -3008,6 +3008,7 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 	}
 	loadBalancerName := c.GetLoadBalancerName(ctx, clusterName, service)
 
+	klog.Warningf("EnsureLoadBalancerDeleted - isNLB(): %t", isNLB(service.Annotations))
 	if isNLB(service.Annotations) {
 		lb, err := c.describeLoadBalancerv2(loadBalancerName)
 		if err != nil {
@@ -3054,6 +3055,7 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			}
 		}
 
+		klog.Warningf("EnsureLoadBalancerDeleted - pre updateInstanceSecurityGroupsForNLB()")
 		err = c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("error deleting instance security group rules: %w", err)
@@ -3061,11 +3063,14 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 
 		// Do nothing if there is no Security Group managed annotation.
 		if managedValue, present := service.Annotations[ServiceAnnotationLoadBalancerManagedSecurityGroup]; !present || managedValue != "true" {
+			klog.Warningf("EnsureLoadBalancerDeleted - pre updateInstanceSecurityGroupsForNLB(): managedValue(%v) present(%t)", managedValue, present)
 			return nil
 		}
 
 		// Ensure instance security groups are deleted when managed.
 		{
+			klog.V(3).Infof("EnsureLoadBalancerDeleted...")
+			klog.Warningf("EnsureLoadBalancerDeleted....")
 			// Delete the security group if it is managed by CCM
 			tagClusterID := TagNameKubernetesClusterPrefix + c.tagging.ClusterID
 			describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
@@ -3076,9 +3081,13 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 					},
 				},
 			})
+			klog.Warningf("EnsureLoadBalancerDeleted - tagClusterID: %s", tagClusterID)
+			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse: %s", describeResponse)
 			if err != nil {
 				return fmt.Errorf("error describing security group of deleted LB: %w", err)
 			}
+			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse: %s", describeResponse)
+			klog.Warningf("EnsureLoadBalancerDeleted - len(describeResponse): %d", len(describeResponse))
 			if len(describeResponse) == 0 {
 				klog.V(3).Infof("No security groups matching the Load Balancer Name to be deleted: %d", len(describeResponse))
 				return nil
