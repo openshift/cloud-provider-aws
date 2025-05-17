@@ -3008,7 +3008,6 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 	}
 	loadBalancerName := c.GetLoadBalancerName(ctx, clusterName, service)
 
-	klog.Warningf("EnsureLoadBalancerDeleted - isNLB(): %t", isNLB(service.Annotations))
 	if isNLB(service.Annotations) {
 		lb, err := c.describeLoadBalancerv2(loadBalancerName)
 		if err != nil {
@@ -3031,7 +3030,6 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 		// * Clean up SecurityGroupRules
 		// * Clean up Security Groups
 		{
-
 			targetGroups, err := c.elbv2.DescribeTargetGroups(
 				&elbv2.DescribeTargetGroupsInput{LoadBalancerArn: lb.LoadBalancerArn},
 			)
@@ -3055,7 +3053,6 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			}
 		}
 
-		klog.Warningf("EnsureLoadBalancerDeleted - pre updateInstanceSecurityGroupsForNLB()")
 		err = c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("error deleting instance security group rules: %w", err)
@@ -3067,70 +3064,50 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			return nil
 		}
 
-		// Ensure instance security groups are deleted when managed.
-		{
-			klog.V(3).Infof("EnsureLoadBalancerDeleted...")
-			klog.Warningf("EnsureLoadBalancerDeleted....")
-			klog.Warningf("EnsureLoadBalancerDeleted - loadBalancerName: %s", loadBalancerName)
+		// Ensure managed NLB security groups are deleted.
+		describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+			GroupIds: lb.SecurityGroups,
+		})
+		if err != nil {
+			return fmt.Errorf("error describing security group of deleted LB: %w", err)
+		}
+		if len(describeResponse) == 0 {
+			klog.V(3).Infof("No security groups matching the Load Balancer Name to be deleted: %d", len(describeResponse))
+			return nil
+		}
 
-			// Delete the security group if it is managed by CCM
-			tagClusterID := TagNameKubernetesClusterPrefix + c.tagging.ClusterID
-			klog.Warningf("EnsureLoadBalancerDeleted - tagClusterID: %s", tagClusterID)
-			klog.Warningf("EnsureLoadBalancerDeleted - lb.SecurityGroups: %v", lb.SecurityGroups)
-
-			describeResponse, err := c.ec2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-				// Filters: []*ec2.Filter{
-				// 	{
-				// 		Name:   aws.String("tag:Name"),
-				// 		Values: aws.StringSlice([]string{loadBalancerName}),
-				// 	},
-				// },
-				GroupIds: lb.SecurityGroups,
-			})
-			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse err: %v", err)
-			if err != nil {
-				return fmt.Errorf("error describing security group of deleted LB: %w", err)
-			}
-			klog.Warningf("EnsureLoadBalancerDeleted - describeResponse: %v", describeResponse)
-			klog.Warningf("EnsureLoadBalancerDeleted - len(describeResponse): %d", len(describeResponse))
-			if len(describeResponse) == 0 {
-				klog.V(3).Infof("No security groups matching the Load Balancer Name to be deleted: %d", len(describeResponse))
-				return nil
-			}
-
-			for _, sgID := range describeResponse {
-				if sgID != nil && c.tagging.hasClusterTag(sgID.Tags) {
-					klog.V(2).Infof("Deleting managed security group: %s", aws.StringValue(sgID.GroupId))
-					backoff := 5 * time.Second
-					retryLimit := 10
-					retryCount := 0
-					for {
-						_, err := c.ec2.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{GroupId: sgID.GroupId})
-						if err == nil {
-							break
-						}
-						if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == "DependencyViolation" {
-							klog.V(2).Infof("Security group %s has dependencies, waiting before retrying deletion: %d/%d", aws.StringValue(sgID.GroupId), retryCount, retryLimit)
-							if retryCount > retryLimit {
-								return fmt.Errorf("exchausted retries while deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
-							}
-							retryCount++
-							if backoff > 60*time.Second {
-								backoff = 10 * time.Second
-							}
-							time.Sleep(backoff)
-							backoff *= 2
-							continue
-						}
-						return fmt.Errorf("error deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
+		klog.Infof("Deleting security group: %v", lb.SecurityGroups)
+		for _, sgID := range describeResponse {
+			if sgID != nil && c.tagging.hasClusterTag(sgID.Tags) {
+				klog.V(2).Infof("Deleting managed security group: %s", aws.StringValue(sgID.GroupId))
+				backoff := 5 * time.Second
+				retryLimit := 10
+				retryCount := 0
+				for {
+					_, err := c.ec2.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{GroupId: sgID.GroupId})
+					if err == nil {
+						break
 					}
-				} else {
-					klog.V(3).Infof("Skipping security group %q delettion as cluster tag does not match with %q", aws.StringValue(sgID.GroupId), tagClusterID)
+					if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == "DependencyViolation" {
+						klog.V(2).Infof("Security group %s has dependencies, waiting before retrying deletion: %d/%d", aws.StringValue(sgID.GroupId), retryCount, retryLimit)
+						if retryCount > retryLimit {
+							return fmt.Errorf("exchausted retries while deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
+						}
+						retryCount++
+						if backoff > 60*time.Second {
+							backoff = 10 * time.Second
+						}
+						time.Sleep(backoff)
+						backoff *= 2
+						continue
+					}
+					return fmt.Errorf("error deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
 				}
+			} else {
+				klog.V(3).Infof("Skipping security group %q delettion as cluster tag does not", aws.StringValue(sgID.GroupId))
 			}
 		}
 
-		// return c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
 		return nil
 	}
 

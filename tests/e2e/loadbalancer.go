@@ -108,6 +108,7 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 
 		By("creating a TCP service " + serviceName + " with type=LoadBalancerType in namespace " + ns.Name)
 		lbJig := e2eservice.NewTestJig(cs, ns.Name, serviceName)
+		lbJig.PodPort = 8080
 
 		serviceUpdateFunc := func(svc *v1.Service) {
 			annotations := make(map[string]string)
@@ -122,13 +123,13 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 					Name:       "http",
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(80),
-					TargetPort: intstr.FromInt(80),
+					TargetPort: intstr.FromInt(8080),
 				},
 				{
 					Name:       "https",
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(443),
-					TargetPort: intstr.FromInt(80),
+					TargetPort: intstr.FromInt(8080),
 				},
 			}
 		}
