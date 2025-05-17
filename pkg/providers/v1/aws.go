@@ -3101,7 +3101,27 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			for _, sgID := range describeResponse {
 				if sgID != nil && c.tagging.hasClusterTag(sgID.Tags) {
 					klog.V(2).Infof("Deleting managed security group: %s", aws.StringValue(sgID.GroupId))
-					if _, err := c.ec2.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{GroupId: sgID.GroupId}); err != nil {
+					backoff := 5 * time.Second
+					retryLimit := 10
+					retryCount := 0
+					for {
+						_, err := c.ec2.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{GroupId: sgID.GroupId})
+						if err == nil {
+							break
+						}
+						if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == "DependencyViolation" {
+							klog.V(2).Infof("Security group %s has dependencies, waiting before retrying deletion: %d/%d", aws.StringValue(sgID.GroupId), retryCount, retryLimit)
+							if retryCount > retryLimit {
+								return fmt.Errorf("exchausted retries while deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
+							}
+							retryCount++
+							if backoff > 60*time.Second {
+								backoff = 10 * time.Second
+							}
+							time.Sleep(backoff)
+							backoff *= 2
+							continue
+						}
 						return fmt.Errorf("error deleting managed security group %s: %w", aws.StringValue(sgID.GroupId), err)
 					}
 				} else {
