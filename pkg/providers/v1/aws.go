@@ -3053,12 +3053,11 @@ func (c *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName strin
 			}
 		}
 
-		err = c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil)
-		if err != nil {
+		if err = c.updateInstanceSecurityGroupsForNLB(loadBalancerName, nil, nil, nil, nil); err != nil {
 			return fmt.Errorf("error deleting instance security group rules: %w", err)
 		}
 
-		// Do nothing if there is no Security Group managed annotation.
+		// Do nothing if there is no Security Group managed annotation (default flow).
 		if managedValue, present := service.Annotations[ServiceAnnotationLoadBalancerManagedSecurityGroup]; !present || managedValue != "true" {
 			klog.Warningf("EnsureLoadBalancerDeleted - pre updateInstanceSecurityGroupsForNLB(): managedValue(%v) present(%t)", managedValue, present)
 			return nil

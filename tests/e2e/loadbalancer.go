@@ -117,24 +117,29 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 				"service.beta.kubernetes.io/aws-load-balancer-managed-security-group": "true",
 			},
 		},
-		// {
-		// 	Name: "with security groups hairpin",
-		// 	Annotations: map[string]string{
-		// 		"service.beta.kubernetes.io/aws-load-balancer-type":                   "nlb",
-		// 		"service.beta.kubernetes.io/aws-load-balancer-managed-security-group": "true",
-		// 		"service.beta.kubernetes.io/aws-load-balancer-target-node-labels":     "node-role.kubernetes.io/worker=",
-		// 	},
-		// },
+		{
+			Name:  "with security groups on workers",
+			Short: "sg-wk",
+			Annotations: map[string]string{
+				"service.beta.kubernetes.io/aws-load-balancer-type":                   "nlb",
+				"service.beta.kubernetes.io/aws-load-balancer-managed-security-group": "true",
+				"service.beta.kubernetes.io/aws-load-balancer-target-node-labels":     "node-role.kubernetes.io/worker=",
+			},
+		},
+		// TODO:  "must support hairpin connection"
 	}
 
-	testNameBase := "should configure the loadbalancer type NLB with security groups"
+	testNameBase := "should configure the loadbalancer type NLB"
 	svcNameBase := "test-lb-nlb"
 	for _, tc := range cases {
 		It(fmt.Sprintf("%s %s", testNameBase, tc.Name), func() {
 			loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(cs)
 			framework.Logf("Running tests against AWS with timeout %s", loadBalancerCreateTimeout)
-
-			serviceName := svcNameBase + "-" + tc.Short
+			suffix := tc.Short
+			if len(suffix) == 0 {
+				suffix = "go"
+			}
+			serviceName := svcNameBase + "-" + suffix
 			framework.Logf("namespace for load balancer conig test: %s", ns.Name)
 
 			By("creating a TCP service " + serviceName + " with type=LoadBalancerType in namespace " + ns.Name)
