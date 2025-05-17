@@ -14,6 +14,8 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -99,64 +101,97 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 		framework.ExpectNoError(err)
 	})
 
-	It("should configure the loadbalancer type NLB with security groups", func() {
-		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(cs)
-		framework.Logf("Running tests against AWS with timeout %s", loadBalancerCreateTimeout)
+	// NLB tests
+	type nlbTestCases struct {
+		Name        string
+		Short       string
+		Annotations map[string]string
+	}
 
-		serviceName := "lbconfig-test-nlb"
-		framework.Logf("namespace for load balancer conig test: %s", ns.Name)
+	cases := []nlbTestCases{
+		{
+			Name:  "with security groups",
+			Short: "sg",
+			Annotations: map[string]string{
+				"service.beta.kubernetes.io/aws-load-balancer-type":                   "nlb",
+				"service.beta.kubernetes.io/aws-load-balancer-managed-security-group": "true",
+			},
+		},
+		// {
+		// 	Name: "with security groups hairpin",
+		// 	Annotations: map[string]string{
+		// 		"service.beta.kubernetes.io/aws-load-balancer-type":                   "nlb",
+		// 		"service.beta.kubernetes.io/aws-load-balancer-managed-security-group": "true",
+		// 		"service.beta.kubernetes.io/aws-load-balancer-target-node-labels":     "node-role.kubernetes.io/worker=",
+		// 	},
+		// },
+	}
 
-		By("creating a TCP service " + serviceName + " with type=LoadBalancerType in namespace " + ns.Name)
-		lbJig := e2eservice.NewTestJig(cs, ns.Name, serviceName)
-		lbJig.PodPort = 8080
+	testNameBase := "should configure the loadbalancer type NLB with security groups"
+	svcNameBase := "test-lb-nlb"
+	for _, tc := range cases {
+		It(fmt.Sprintf("%s %s", testNameBase, tc.Name), func() {
+			loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(cs)
+			framework.Logf("Running tests against AWS with timeout %s", loadBalancerCreateTimeout)
 
-		serviceUpdateFunc := func(svc *v1.Service) {
-			annotations := make(map[string]string)
-			annotations["aws-load-balancer-backend-protocol"] = "http"
-			annotations["aws-load-balancer-ssl-ports"] = "https"
-			annotations["service.beta.kubernetes.io/aws-load-balancer-type"] = "nlb"
-			annotations["service.beta.kubernetes.io/aws-load-balancer-managed-security-group"] = "true"
+			serviceName := svcNameBase + "-" + tc.Short
+			framework.Logf("namespace for load balancer conig test: %s", ns.Name)
 
-			svc.Annotations = annotations
-			svc.Spec.Ports = []v1.ServicePort{
-				{
-					Name:       "http",
-					Protocol:   v1.ProtocolTCP,
-					Port:       int32(80),
-					TargetPort: intstr.FromInt(8080),
-				},
-				{
-					Name:       "https",
-					Protocol:   v1.ProtocolTCP,
-					Port:       int32(443),
-					TargetPort: intstr.FromInt(8080),
-				},
+			By("creating a TCP service " + serviceName + " with type=LoadBalancerType in namespace " + ns.Name)
+			lbJig := e2eservice.NewTestJig(cs, ns.Name, serviceName)
+			lbJig.PodPort = 8080
+
+			serviceUpdateFunc := func(svc *v1.Service) {
+				annotations := make(map[string]string)
+				annotations["aws-load-balancer-backend-protocol"] = "http"
+				annotations["aws-load-balancer-ssl-ports"] = "https"
+
+				// append test case annotations to the service
+				for annK, annV := range tc.Annotations {
+					annotations[annK] = annV
+				}
+
+				svc.Annotations = annotations
+				svc.Spec.Ports = []v1.ServicePort{
+					{
+						Name:       "http",
+						Protocol:   v1.ProtocolTCP,
+						Port:       int32(80),
+						TargetPort: intstr.FromInt(int(lbJig.PodPort)),
+					},
+					{
+						Name:       "https",
+						Protocol:   v1.ProtocolTCP,
+						Port:       int32(443),
+						TargetPort: intstr.FromInt(int(lbJig.PodPort)),
+					},
+				}
 			}
-		}
 
-		lbService, err := lbJig.CreateLoadBalancerService(loadBalancerCreateTimeout, serviceUpdateFunc)
-		framework.ExpectNoError(err)
+			lbService, err := lbJig.CreateLoadBalancerService(loadBalancerCreateTimeout, serviceUpdateFunc)
+			framework.ExpectNoError(err)
 
-		By("creating a pod to be part of the TCP service " + serviceName)
-		_, err = lbJig.Run(nil)
-		framework.ExpectNoError(err)
+			By("creating a pod to be part of the TCP service " + serviceName)
+			_, err = lbJig.Run(nil)
+			framework.ExpectNoError(err)
 
-		By("hitting the TCP service's LB External IP")
-		svcPort := int(lbService.Spec.Ports[0].Port)
-		ingressIP := e2eservice.GetIngressPoint(&lbService.Status.LoadBalancer.Ingress[0])
-		framework.Logf("Load balancer's ingress IP: %s", ingressIP)
+			By("hitting the TCP service's LB External IP")
+			svcPort := int(lbService.Spec.Ports[0].Port)
+			ingressIP := e2eservice.GetIngressPoint(&lbService.Status.LoadBalancer.Ingress[0])
+			framework.Logf("Load balancer's ingress IP: %s", ingressIP)
 
-		e2eservice.TestReachableHTTP(ingressIP, svcPort, e2eservice.LoadBalancerLagTimeoutAWS)
+			e2eservice.TestReachableHTTP(ingressIP, svcPort, e2eservice.LoadBalancerLagTimeoutAWS)
 
-		// Update the service to cluster IP
-		By("changing TCP service back to type=ClusterIP")
-		_, err = lbJig.UpdateService(func(s *v1.Service) {
-			s.Spec.Type = v1.ServiceTypeClusterIP
+			// Update the service to cluster IP
+			By("changing TCP service back to type=ClusterIP")
+			_, err = lbJig.UpdateService(func(s *v1.Service) {
+				s.Spec.Type = v1.ServiceTypeClusterIP
+			})
+			framework.ExpectNoError(err)
+
+			// Wait for the load balancer to be destroyed asynchronously
+			_, err = lbJig.WaitForLoadBalancerDestroy(ingressIP, svcPort, loadBalancerCreateTimeout)
+			framework.ExpectNoError(err)
 		})
-		framework.ExpectNoError(err)
-
-		// Wait for the load balancer to be destroyed asynchronously
-		_, err = lbJig.WaitForLoadBalancerDestroy(ingressIP, svcPort, loadBalancerCreateTimeout)
-		framework.ExpectNoError(err)
-	})
+	}
 })
