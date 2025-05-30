@@ -68,8 +68,6 @@ type TestJig struct {
 	// ExternalIPs should be false for Conformance test
 	// Don't check nodeport on external addrs in conformance test, but in e2e test.
 	ExternalIPs bool
-	PodPort     int64
-	SvcPort     int64
 }
 
 // NewTestJig allocates and inits a new TestJig.
@@ -80,8 +78,7 @@ func NewTestJig(client clientset.Interface, namespace, name string) *TestJig {
 	j.Name = name
 	j.ID = j.Name + "-" + string(uuid.NewUUID())
 	j.Labels = map[string]string{"testid": j.ID}
-	j.PodPort = 80
-	j.SvcPort = 80
+
 	return j
 }
 
@@ -248,7 +245,7 @@ func (j *TestJig) CreateOnlyLocalLoadBalancerService(timeout time.Duration, crea
 // for it to acquire an ingress IP.
 func (j *TestJig) CreateLoadBalancerService(timeout time.Duration, tweak func(svc *v1.Service)) (*v1.Service, error) {
 	ginkgo.By("creating a service " + j.Namespace + "/" + j.Name + " with type=LoadBalancer")
-	svc := j.newServiceTemplate(v1.ProtocolTCP, int32(j.SvcPort))
+	svc := j.newServiceTemplate(v1.ProtocolTCP, 80)
 	svc.Spec.Type = v1.ServiceTypeLoadBalancer
 	// We need to turn affinity off for our LB distribution tests
 	svc.Spec.SessionAffinity = v1.ServiceAffinityNone
@@ -662,16 +659,12 @@ func (j *TestJig) newRCTemplate() *v1.ReplicationController {
 						{
 							Name:  "netexec",
 							Image: imageutils.GetE2EImage(imageutils.Agnhost),
-							Args: []string{
-								"netexec",
-								fmt.Sprintf("--http-port=%d", j.PodPort),
-								fmt.Sprintf("--udp-port=%d", j.PodPort),
-							},
+							Args:  []string{"netexec", "--http-port=80", "--udp-port=80"},
 							ReadinessProbe: &v1.Probe{
 								PeriodSeconds: 3,
 								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
-										Port: intstr.FromInt(int(j.PodPort)),
+										Port: intstr.FromInt(80),
 										Path: "/hostName",
 									},
 								},
