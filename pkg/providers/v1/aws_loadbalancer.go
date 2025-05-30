@@ -405,6 +405,7 @@ func (c *Cloud) ensureLoadBalancerv2(namespacedName types.NamespacedName, loadBa
 func (c *Cloud) reconcileLBAttributes(loadBalancerArn string, annotations map[string]string) error {
 	desiredLoadBalancerAttributes := map[string]string{}
 
+	//REVIEW on Update
 	desiredLoadBalancerAttributes[lbAttrLoadBalancingCrossZoneEnabled] = "false"
 	crossZoneLoadBalancingEnabledAnnotation := annotations[ServiceAnnotationLoadBalancerCrossZoneLoadBalancingEnabled]
 	if crossZoneLoadBalancingEnabledAnnotation != "" {
