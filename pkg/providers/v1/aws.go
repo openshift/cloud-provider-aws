@@ -2375,10 +2375,12 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		// Create NLB with security group support only when one of the following annotations is added:
 		// ServiceAnnotationLoadBalancerManagedSecurityGroup: managed security group. CCM creates and manage SG for NLB.
 		securityGroups := []*string{}
-		if managedValue, present := annotations[ServiceAnnotationLoadBalancerManagedSecurityGroup]; present { // managed
-			if managedValue != "true" {
-				return nil, fmt.Errorf("invalid value for annotation %q: %s. valid value: 'true'", ServiceAnnotationLoadBalancerManagedSecurityGroup, managedValue)
-			}
+		// if managedValue, present := annotations[ServiceAnnotationLoadBalancerManagedSecurityGroup]; present { // managed
+		// 	if managedValue != "true" {
+		// 		return nil, fmt.Errorf("invalid value for annotation %q: %s. valid value: 'true'", ServiceAnnotationLoadBalancerManagedSecurityGroup, managedValue)
+		// 	}
+		if c.cfg.Global.NLBSecurityGroupEnabled {
+
 			// annotation conflict - don't support unmanaged/BYO path on NLB
 			// TODO: this would be overscoped in OCP feature, and it's not required for short-term.
 			// TODO/TBD: do we need to support BYO SG for NLBs? Would it be supported with ManagedSecurityGroup annotation?

@@ -19,6 +19,9 @@ const (
 	ClusterServiceLoadBalancerHealthProbeModeServiceNodePort = "ServiceNodePort"
 )
 
+// NLBSecurityGroupEnabled indicates whether the service loadbalancer type NLB is created with a Security Group.
+type NLBSecurityGroupEnabled bool
+
 // CloudConfig wraps the settings for the AWS cloud provider.
 // NOTE: Cloud config files should follow the same Kubernetes deprecation policy as
 // flags or CLIs. Config fields should not change behavior in incompatible ways and
@@ -83,6 +86,10 @@ type CloudConfig struct {
 
 		// ClusterServiceSharedLoadBalancerHealthProbePath defines the target path of the shared health probe. Default to `/healthz`.
 		ClusterServiceSharedLoadBalancerHealthProbePath string `json:"clusterServiceSharedLoadBalancerHealthProbePath,omitempty" yaml:"clusterServiceSharedLoadBalancerHealthProbePath,omitempty"`
+
+		// NLBSecurityGroupEnabled determines if the service type loadbalancer NLB creates and manages
+		// the resource with a security group (default behavior Classic Load Balancer).
+		NLBSecurityGroupEnabled NLBSecurityGroupEnabled `json:"nlbSecurityGroupEnabled,omitempty" yaml:"nlbSecurityGroupEnabled,omitempty"`
 	}
 	// [ServiceOverride "1"]
 	//  Service = s3
