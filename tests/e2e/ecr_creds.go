@@ -39,7 +39,7 @@ var _ = gingko.Describe("[cloud-provider-aws-e2e] ecr", func() {
 				Containers: []v1.Container{
 					{
 						Name:  "test",
-						Image: "public.ecr.aws/nginx/nginx:latest",
+						Image: "602401143452.dkr.ecr.us-east-1.amazonaws.com/eks/pause:3.5",
 					},
 				},
 			},
