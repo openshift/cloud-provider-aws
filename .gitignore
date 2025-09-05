@@ -11,3 +11,6 @@ e2e.test
 .idea/
 **/*.swp
 .DS_Store
+
+# OpenShift hack
+/aws-cloud-controller-manager-tests-ext
