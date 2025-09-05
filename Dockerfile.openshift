@@ -1,5 +1,8 @@
 FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.24-openshift-4.21 AS builder
 
+#
+# CCM binary builder
+#
 WORKDIR /build
 COPY . .
 RUN GO111MODULE=on CGO_ENABLED=0 GOOS=${GOOS} GOPROXY=${GOPROXY} go build \
@@ -7,10 +10,24 @@ RUN GO111MODULE=on CGO_ENABLED=0 GOOS=${GOOS} GOPROXY=${GOPROXY} go build \
 	-o=aws-cloud-controller-manager \
 	cmd/aws-cloud-controller-manager/main.go
 
+#
+# OpenShift Tests Extension binary builder
+#
+RUN pushd tests/aws-cloud-controller-manager-tests-ext && \
+	GO111MODULE=on CGO_ENABLED=0 GOOS=${GOOS} GOPROXY=${GOPROXY} go build \
+	-trimpath \
+	-ldflags="-w -s -X 'main.version=${VERSION}'" \
+	-o=/build/aws-cloud-controller-manager-tests-ext . && \
+	gzip /build/aws-cloud-controller-manager-tests-ext
+
+#
+# Main stage
+#
 FROM registry.ci.openshift.org/ocp/4.21:base-rhel9
 
 LABEL description="AWS Cloud Controller Manager"
 
 COPY --from=builder /build/aws-cloud-controller-manager /bin/aws-cloud-controller-manager
+COPY --from=builder /build/aws-cloud-controller-manager-tests-ext.gz /bin/aws-cloud-controller-manager-tests-ext.gz
 
 ENTRYPOINT [ "/bin/aws-cloud-controller-manager" ]
