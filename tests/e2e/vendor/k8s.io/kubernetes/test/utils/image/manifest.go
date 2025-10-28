@@ -28,7 +28,7 @@ import (
 	"regexp"
 	"strings"
 
-	"gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v2"
 )
 
 // RegistryList holds public and private image registries
@@ -41,7 +41,6 @@ type RegistryList struct {
 	GcRegistry               string `yaml:"gcRegistry"`
 	SigStorageRegistry       string `yaml:"sigStorageRegistry"`
 	PrivateRegistry          string `yaml:"privateRegistry"`
-	MicrosoftRegistry        string `yaml:"microsoftRegistry"`
 	DockerLibraryRegistry    string `yaml:"dockerLibraryRegistry"`
 	CloudProviderGcpRegistry string `yaml:"cloudProviderGcpRegistry"`
 }
@@ -68,12 +67,16 @@ func (i *Config) SetVersion(version string) {
 	i.version = version
 }
 
-func initReg() RegistryList {
+func Init(repoList string) {
+	registry, imageConfigs, originalImageConfigs = readRepoList(repoList)
+}
+
+func readRepoList(repoList string) (RegistryList, map[ImageID]Config, map[ImageID]Config) {
 	registry := initRegistry
 
-	repoList := os.Getenv("KUBE_TEST_REPO_LIST")
 	if repoList == "" {
-		return registry
+		imageConfigs, originalImageConfigs := initImageConfigs(registry)
+		return registry, imageConfigs, originalImageConfigs
 	}
 
 	var fileContent []byte
@@ -94,9 +97,13 @@ func initReg() RegistryList {
 
 	err = yaml.Unmarshal(fileContent, &registry)
 	if err != nil {
-		panic(fmt.Errorf("Error unmarshalling '%v' YAML file: %v", repoList, err))
+		panic(fmt.Errorf("error unmarshalling '%v' YAML file: %v", repoList, err))
 	}
-	return registry
+
+	imageConfigs, originalImageConfigs := initImageConfigs(registry)
+
+	return registry, imageConfigs, originalImageConfigs
+
 }
 
 // Essentially curl url | writer
@@ -122,23 +129,23 @@ func readFromURL(url string, writer io.Writer) error {
 
 var (
 	initRegistry = RegistryList{
-		GcAuthenticatedRegistry:  "gcr.io/authenticated-image-pulling",
-		PromoterE2eRegistry:      "registry.k8s.io/e2e-test-images",
-		BuildImageRegistry:       "registry.k8s.io/build-image",
-		InvalidRegistry:          "invalid.registry.k8s.io/invalid",
-		GcEtcdRegistry:           "registry.k8s.io",
-		GcRegistry:               "registry.k8s.io",
-		SigStorageRegistry:       "registry.k8s.io/sig-storage",
+		// TODO: https://github.com/kubernetes/kubernetes/issues/130271
+		// Eliminate GcAuthenticatedRegistry.
+		GcAuthenticatedRegistry: "gcr.io/authenticated-image-pulling",
+		PromoterE2eRegistry:     "registry.k8s.io/e2e-test-images",
+		BuildImageRegistry:      "registry.k8s.io/build-image",
+		InvalidRegistry:         "invalid.registry.k8s.io/invalid",
+		GcEtcdRegistry:          "registry.k8s.io",
+		GcRegistry:              "registry.k8s.io",
+		SigStorageRegistry:      "registry.k8s.io/sig-storage",
+		// TODO: https://github.com/kubernetes/kubernetes/issues/130271
+		// Eliminate PrivateRegistry.
 		PrivateRegistry:          "gcr.io/k8s-authenticated-test",
-		MicrosoftRegistry:        "mcr.microsoft.com",
 		DockerLibraryRegistry:    "docker.io/library",
 		CloudProviderGcpRegistry: "registry.k8s.io/cloud-provider-gcp",
 	}
 
-	registry = initReg()
-
-	// Preconfigured image configs
-	imageConfigs, originalImageConfigs = initImageConfigs(registry)
+	registry, imageConfigs, originalImageConfigs = readRepoList(os.Getenv("KUBE_TEST_REPO_LIST"))
 )
 
 type ImageID int
@@ -149,27 +156,23 @@ const (
 	// Agnhost image
 	Agnhost
 	// AgnhostPrivate image
+	// TODO: https://github.com/kubernetes/kubernetes/issues/130271
+	// Eliminate this.
 	AgnhostPrivate
 	// APIServer image
 	APIServer
 	// AppArmorLoader image
 	AppArmorLoader
 	// AuthenticatedAlpine image
+	// TODO: https://github.com/kubernetes/kubernetes/issues/130271
+	// Eliminate this.
 	AuthenticatedAlpine
-	// AuthenticatedWindowsNanoServer image
-	AuthenticatedWindowsNanoServer
 	// BusyBox image
 	BusyBox
-	// CudaVectorAdd image
-	CudaVectorAdd
-	// CudaVectorAdd2 image
-	CudaVectorAdd2
 	// DistrolessIptables Image
 	DistrolessIptables
 	// Etcd image
 	Etcd
-	// GlusterDynamicProvisioner image
-	GlusterDynamicProvisioner
 	// Httpd image
 	Httpd
 	// HttpdNew image
@@ -205,44 +208,26 @@ const (
 	Pause
 	// Perl image
 	Perl
-	// PrometheusDummyExporter image
-	PrometheusDummyExporter
-	// PrometheusToSd image
-	PrometheusToSd
-	// Redis image
-	Redis
 	// RegressionIssue74839 image
 	RegressionIssue74839
 	// ResourceConsumer image
 	ResourceConsumer
-	// SdDummyExporter image
-	SdDummyExporter
 	// VolumeNFSServer image
 	VolumeNFSServer
 	// VolumeISCSIServer image
 	VolumeISCSIServer
-	// VolumeGlusterServer image
-	VolumeGlusterServer
-	// VolumeRBDServer image
-	VolumeRBDServer
-	// WindowsServer image
-	WindowsServer
 )
 
 func initImageConfigs(list RegistryList) (map[ImageID]Config, map[ImageID]Config) {
 	configs := map[ImageID]Config{}
-	configs[Agnhost] = Config{list.PromoterE2eRegistry, "agnhost", "2.43"}
+	configs[Agnhost] = Config{list.PromoterE2eRegistry, "agnhost", "2.56"}
 	configs[AgnhostPrivate] = Config{list.PrivateRegistry, "agnhost", "2.6"}
 	configs[AuthenticatedAlpine] = Config{list.GcAuthenticatedRegistry, "alpine", "3.7"}
-	configs[AuthenticatedWindowsNanoServer] = Config{list.GcAuthenticatedRegistry, "windows-nanoserver", "v1"}
-	configs[APIServer] = Config{list.PromoterE2eRegistry, "sample-apiserver", "1.17.7"}
+	configs[APIServer] = Config{list.PromoterE2eRegistry, "sample-apiserver", "1.29.2"}
 	configs[AppArmorLoader] = Config{list.PromoterE2eRegistry, "apparmor-loader", "1.4"}
-	configs[BusyBox] = Config{list.PromoterE2eRegistry, "busybox", "1.29-4"}
-	configs[CudaVectorAdd] = Config{list.PromoterE2eRegistry, "cuda-vector-add", "1.0"}
-	configs[CudaVectorAdd2] = Config{list.PromoterE2eRegistry, "cuda-vector-add", "2.2"}
-	configs[DistrolessIptables] = Config{list.BuildImageRegistry, "distroless-iptables", "v0.1.2"}
-	configs[Etcd] = Config{list.GcEtcdRegistry, "etcd", "3.5.6-0"}
-	configs[GlusterDynamicProvisioner] = Config{list.PromoterE2eRegistry, "glusterdynamic-provisioner", "v1.3"}
+	configs[BusyBox] = Config{list.PromoterE2eRegistry, "busybox", "1.37.0-1"}
+	configs[DistrolessIptables] = Config{list.BuildImageRegistry, "distroless-iptables", "v0.7.8"}
+	configs[Etcd] = Config{list.GcEtcdRegistry, "etcd", "3.6.4-0"}
 	configs[Httpd] = Config{list.PromoterE2eRegistry, "httpd", "2.4.38-4"}
 	configs[HttpdNew] = Config{list.PromoterE2eRegistry, "httpd", "2.4.39-4"}
 	configs[InvalidRegistryImage] = Config{list.InvalidRegistry, "alpine", "3.1"}
@@ -250,7 +235,7 @@ func initImageConfigs(list RegistryList) (map[ImageID]Config, map[ImageID]Config
 	configs[JessieDnsutils] = Config{list.PromoterE2eRegistry, "jessie-dnsutils", "1.7"}
 	configs[Kitten] = Config{list.PromoterE2eRegistry, "kitten", "1.7"}
 	configs[Nautilus] = Config{list.PromoterE2eRegistry, "nautilus", "1.7"}
-	configs[NFSProvisioner] = Config{list.SigStorageRegistry, "nfs-provisioner", "v3.0.1"}
+	configs[NFSProvisioner] = Config{list.SigStorageRegistry, "nfs-provisioner", "v4.0.8"}
 	configs[Nginx] = Config{list.PromoterE2eRegistry, "nginx", "1.14-4"}
 	configs[NginxNew] = Config{list.PromoterE2eRegistry, "nginx", "1.15-4"}
 	configs[NodePerfNpbEp] = Config{list.PromoterE2eRegistry, "node-perf/npb-ep", "1.2"}
@@ -259,19 +244,12 @@ func initImageConfigs(list RegistryList) (map[ImageID]Config, map[ImageID]Config
 	configs[Nonewprivs] = Config{list.PromoterE2eRegistry, "nonewprivs", "1.3"}
 	configs[NonRoot] = Config{list.PromoterE2eRegistry, "nonroot", "1.4"}
 	// Pause - when these values are updated, also update cmd/kubelet/app/options/container_runtime.go
-	configs[Pause] = Config{list.GcRegistry, "pause", "3.9"}
+	configs[Pause] = Config{list.GcRegistry, "pause", "3.10.1"}
 	configs[Perl] = Config{list.PromoterE2eRegistry, "perl", "5.26"}
-	configs[PrometheusDummyExporter] = Config{list.GcRegistry, "prometheus-dummy-exporter", "v0.1.0"}
-	configs[PrometheusToSd] = Config{list.GcRegistry, "prometheus-to-sd", "v0.5.0"}
-	configs[Redis] = Config{list.PromoterE2eRegistry, "redis", "5.0.5-3"}
 	configs[RegressionIssue74839] = Config{list.PromoterE2eRegistry, "regression-issue-74839", "1.2"}
 	configs[ResourceConsumer] = Config{list.PromoterE2eRegistry, "resource-consumer", "1.13"}
-	configs[SdDummyExporter] = Config{list.GcRegistry, "sd-dummy-exporter", "v0.2.0"}
-	configs[VolumeNFSServer] = Config{list.PromoterE2eRegistry, "volume/nfs", "1.3"}
-	configs[VolumeISCSIServer] = Config{list.PromoterE2eRegistry, "volume/iscsi", "2.3"}
-	configs[VolumeGlusterServer] = Config{list.PromoterE2eRegistry, "volume/gluster", "1.3"}
-	configs[VolumeRBDServer] = Config{list.PromoterE2eRegistry, "volume/rbd", "1.0.4"}
-	configs[WindowsServer] = Config{list.MicrosoftRegistry, "windows", "1809"}
+	configs[VolumeNFSServer] = Config{list.PromoterE2eRegistry, "volume/nfs", "1.4"}
+	configs[VolumeISCSIServer] = Config{list.PromoterE2eRegistry, "volume/iscsi", "2.6"}
 
 	// This adds more config entries. Those have no pre-defined ImageID number,
 	// but will be used via ReplaceRegistryInImageURL when deploying
@@ -294,7 +272,7 @@ func GetMappedImageConfigs(originalImageConfigs map[ImageID]Config, repo string)
 	for i, config := range originalImageConfigs {
 		switch i {
 		case InvalidRegistryImage, AuthenticatedAlpine,
-			AuthenticatedWindowsNanoServer, AgnhostPrivate:
+			AgnhostPrivate:
 			// These images are special and can't be run out of the cloud - some because they
 			// are authenticated, and others because they are not real images. Tests that depend
 			// on these images can't be run without access to the public internet.
@@ -421,8 +399,6 @@ func replaceRegistryInImageURLWithList(imageURL string, reg RegistryList) (strin
 		registryAndUser = reg.PrivateRegistry
 	case initRegistry.InvalidRegistry:
 		registryAndUser = reg.InvalidRegistry
-	case initRegistry.MicrosoftRegistry:
-		registryAndUser = reg.MicrosoftRegistry
 	case initRegistry.PromoterE2eRegistry:
 		registryAndUser = reg.PromoterE2eRegistry
 	case initRegistry.BuildImageRegistry:

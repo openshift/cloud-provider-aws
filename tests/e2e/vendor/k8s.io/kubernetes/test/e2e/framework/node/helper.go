@@ -18,18 +18,22 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
-
+	"github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-	testutils "k8s.io/kubernetes/test/utils"
+	"k8s.io/client-go/util/retry"
 
 	"k8s.io/kubernetes/test/e2e/framework"
+	testutils "k8s.io/kubernetes/test/utils"
 )
 
 const (
@@ -39,16 +43,18 @@ const (
 
 // WaitForAllNodesSchedulable waits up to timeout for all
 // (but TestContext.AllowedNotReadyNodes) to become schedulable.
-func WaitForAllNodesSchedulable(c clientset.Interface, timeout time.Duration) error {
+func WaitForAllNodesSchedulable(ctx context.Context, c clientset.Interface, timeout time.Duration) error {
 	if framework.TestContext.AllowedNotReadyNodes == -1 {
 		return nil
 	}
 
 	framework.Logf("Waiting up to %v for all (but %d) nodes to be schedulable", timeout, framework.TestContext.AllowedNotReadyNodes)
-	return wait.PollImmediate(
+	return wait.PollUntilContextTimeout(
+		ctx,
 		30*time.Second,
 		timeout,
-		CheckReadyForTests(c, framework.TestContext.NonblockingTaints, framework.TestContext.AllowedNotReadyNodes, largeClusterThreshold),
+		true,
+		CheckReadyForTests(ctx, c, framework.TestContext.NonblockingTaints, framework.TestContext.AllowedNotReadyNodes, largeClusterThreshold),
 	)
 }
 
@@ -58,11 +64,11 @@ func AddOrUpdateLabelOnNode(c clientset.Interface, nodeName string, labelKey, la
 }
 
 // ExpectNodeHasLabel expects that the given node has the given label pair.
-func ExpectNodeHasLabel(c clientset.Interface, nodeName string, labelKey string, labelValue string) {
+func ExpectNodeHasLabel(ctx context.Context, c clientset.Interface, nodeName string, labelKey string, labelValue string) {
 	ginkgo.By("verifying the node has the label " + labelKey + " " + labelValue)
-	node, err := c.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
+	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
-	framework.ExpectEqual(node.Labels[labelKey], labelValue)
+	gomega.Expect(node.Labels).To(gomega.HaveKeyWithValue(labelKey, labelValue))
 }
 
 // RemoveLabelOffNode is for cleaning up labels temporarily added to node,
@@ -76,17 +82,17 @@ func RemoveLabelOffNode(c clientset.Interface, nodeName string, labelKey string)
 }
 
 // ExpectNodeHasTaint expects that the node has the given taint.
-func ExpectNodeHasTaint(c clientset.Interface, nodeName string, taint *v1.Taint) {
+func ExpectNodeHasTaint(ctx context.Context, c clientset.Interface, nodeName string, taint *v1.Taint) {
 	ginkgo.By("verifying the node has the taint " + taint.ToString())
-	if has, err := NodeHasTaint(c, nodeName, taint); !has {
+	if has, err := NodeHasTaint(ctx, c, nodeName, taint); !has {
 		framework.ExpectNoError(err)
 		framework.Failf("Failed to find taint %s on node %s", taint.ToString(), nodeName)
 	}
 }
 
 // NodeHasTaint returns true if the node has the given taint, else returns false.
-func NodeHasTaint(c clientset.Interface, nodeName string, taint *v1.Taint) (bool, error) {
-	node, err := c.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
+func NodeHasTaint(ctx context.Context, c clientset.Interface, nodeName string, taint *v1.Taint) (bool, error) {
+	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return false, err
 	}
@@ -104,14 +110,14 @@ func NodeHasTaint(c clientset.Interface, nodeName string, taint *v1.Taint) (bool
 // TODO: we should change the AllNodesReady call in AfterEach to WaitForAllNodesHealthy,
 // and figure out how to do it in a configurable way, as we can't expect all setups to run
 // default test add-ons.
-func AllNodesReady(c clientset.Interface, timeout time.Duration) error {
-	if err := allNodesReady(c, timeout); err != nil {
-		return fmt.Errorf("checking for ready nodes: %v", err)
+func AllNodesReady(ctx context.Context, c clientset.Interface, timeout time.Duration) error {
+	if err := allNodesReady(ctx, c, timeout); err != nil {
+		return fmt.Errorf("checking for ready nodes: %w", err)
 	}
 	return nil
 }
 
-func allNodesReady(c clientset.Interface, timeout time.Duration) error {
+func allNodesReady(ctx context.Context, c clientset.Interface, timeout time.Duration) error {
 	if framework.TestContext.AllowedNotReadyNodes == -1 {
 		return nil
 	}
@@ -119,10 +125,10 @@ func allNodesReady(c clientset.Interface, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for all (but %d) nodes to be ready", timeout, framework.TestContext.AllowedNotReadyNodes)
 
 	var notReady []*v1.Node
-	err := wait.PollImmediate(framework.Poll, timeout, func() (bool, error) {
+	err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {
 		notReady = nil
 		// It should be OK to list unschedulable Nodes here.
-		nodes, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+		nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -140,7 +146,7 @@ func allNodesReady(c clientset.Interface, timeout time.Duration) error {
 		return len(notReady) <= framework.TestContext.AllowedNotReadyNodes, nil
 	})
 
-	if err != nil && err != wait.ErrWaitTimeout {
+	if err != nil && !wait.Interrupted(err) {
 		return err
 	}
 
@@ -162,4 +168,57 @@ func taintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 		}
 	}
 	return false
+}
+
+// IsARM64 checks whether the k8s Node has arm64 arch.
+func IsARM64(node *v1.Node) bool {
+	arch, ok := node.Labels["kubernetes.io/arch"]
+	if ok {
+		return arch == "arm64"
+	}
+
+	return false
+}
+
+// AddExtendedResource adds a fake resource to the Node.
+func AddExtendedResource(ctx context.Context, clientSet clientset.Interface, nodeName string, extendedResourceName v1.ResourceName, extendedResourceQuantity resource.Quantity) {
+	extendedResource := v1.ResourceName(extendedResourceName)
+
+	ginkgo.By("Adding a custom resource")
+	extendedResourceList := v1.ResourceList{
+		extendedResource: extendedResourceQuantity,
+	}
+
+	// This is a workaround for the fact that we shouldn't marshal a Node struct to JSON
+	// because it wipes out some fields from node status like the daemonEndpoints and
+	// nodeInfo which should not be changed at this time. We need to use a map instead.
+	// See https://github.com/kubernetes/kubernetes/issues/131229
+	patchPayload, err := json.Marshal(map[string]any{
+		"status": map[string]any{
+			"capacity":    extendedResourceList,
+			"allocatable": extendedResourceList,
+		},
+	})
+	framework.ExpectNoError(err, "Failed to marshal node JSON")
+
+	_, err = clientSet.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, []byte(patchPayload), metav1.PatchOptions{}, "status")
+	framework.ExpectNoError(err)
+}
+
+// RemoveExtendedResource removes a fake resource from the Node.
+func RemoveExtendedResource(ctx context.Context, clientSet clientset.Interface, nodeName string, extendedResourceName v1.ResourceName) {
+	extendedResource := v1.ResourceName(extendedResourceName)
+
+	ginkgo.By("Removing a custom resource")
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		node, err := clientSet.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
+		delete(node.Status.Capacity, extendedResource)
+		delete(node.Status.Allocatable, extendedResource)
+		_, err = clientSet.CoreV1().Nodes().UpdateStatus(ctx, node, metav1.UpdateOptions{})
+		return err
+	})
+	framework.ExpectNoError(err)
 }

@@ -4,7 +4,7 @@ The Kubernetes E2E framework simplifies writing Ginkgo tests suites. It's main
 usage is for these tests suites in the Kubernetes repository itself:
 - test/e2e: runs as client for a Kubernetes cluster. The e2e.test binary is
   used for conformance testing.
-- test/e2e_node: runs on the same node as a kublet instance. Used for testing
+- test/e2e_node: runs on the same node as a kubelet instance. Used for testing
   kubelet.
 - test/e2e_kubeadm: test suite for kubeadm.
 
@@ -57,7 +57,7 @@ ginkgo.AfterEach(func() {
     # Do something with f.ClientSet.
 }
 
-ginkgo.It("test something", func() {
+ginkgo.It("test something", func(ctx context.Context) {
     # The actual test.
 })
 ```

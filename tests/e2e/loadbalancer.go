@@ -21,6 +21,8 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -38,9 +40,10 @@ import (
 )
 
 const (
-	annotationLBType             = "service.beta.kubernetes.io/aws-load-balancer-type"
-	annotationLBInternal         = "service.beta.kubernetes.io/aws-load-balancer-internal"
-	annotationLBTargetNodeLabels = "service.beta.kubernetes.io/aws-load-balancer-target-node-labels"
+	annotationLBType                  = "service.beta.kubernetes.io/aws-load-balancer-type"
+	annotationLBInternal              = "service.beta.kubernetes.io/aws-load-balancer-internal"
+	annotationLBTargetNodeLabels      = "service.beta.kubernetes.io/aws-load-balancer-target-node-labels"
+	annotationLBTargetGroupAttributes = "service.beta.kubernetes.io/aws-load-balancer-target-group-attributes"
 )
 
 var (
@@ -142,19 +145,20 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 			requireAffinity:                       true,
 		},
 		// Hairpining traffic test for NLB.
-		// Hairpin connection work with target type as instance only when preserve client IP is disabled.
-		// Currently CCM does not provide an interface to create a service with that setup, making an internal
-		// Service to fail.
-		// FIXME: https://github.com/kubernetes/cloud-provider-aws/issues/1160
-		// Once issue 1160 is fixed, the skipTestFailure must be unset/false.
+		// The target type instance (default) sets the preserve client IP attribute to true,
+		// the NLB target group attributes are set to preserve_client_ip.enabled=false to allow hairpining traffic.
+		// The test also validates the target group attributes are set correctly to AWS resource.
 		{
 			name:           "NLB internal should be reachable with hairpinning traffic",
 			resourceSuffix: "hp-nlb-int",
 			extraAnnotations: map[string]string{
-				annotationLBType:     "nlb",
-				annotationLBInternal: "true",
+				annotationLBType:                  "nlb",
+				annotationLBInternal:              "true",
+				annotationLBTargetGroupAttributes: "preserve_client_ip.enabled=false",
 			},
-			listenerCount: 1,
+			listenerCount:                         1,
+			overrideTestRunInClusterReachableHTTP: true,
+			requireAffinity:                       true,
 			hookPostServiceConfig: func(cfg *e2eTestConfig) {
 				framework.Logf("running hook post-service-config patching service annotations to enforce LB pins/selects target to a single node: kubernetes.io/hostname=%s", cfg.nodeSingleSample)
 				if cfg.svc.Annotations == nil {
@@ -162,22 +166,98 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 				}
 				cfg.svc.Annotations[annotationLBTargetNodeLabels] = fmt.Sprintf("kubernetes.io/hostname=%s", cfg.nodeSingleSample)
 			},
-			overrideTestRunInClusterReachableHTTP: true,
-			requireAffinity:                       true,
-			skipTestFailure:                       true,
+			hookPreTest: func(e2e *e2eTestConfig) {
+				framework.Logf("running hook pre-test: verify target group attributes are set correctly to AWS resource")
+
+				if e2e.svc.Status.LoadBalancer.Ingress[0].Hostname == "" && e2e.svc.Status.LoadBalancer.Ingress[0].IP == "" {
+					framework.Failf("LoadBalancer ingress is empty (no hostname or IP) for service %s/%s", e2e.svc.Namespace, e2e.svc.Name)
+				}
+
+				hostAddr := e2eservice.GetIngressPoint(&e2e.svc.Status.LoadBalancer.Ingress[0])
+				framework.Logf("Load balancer's ingress address: %s", hostAddr)
+
+				if hostAddr == "" {
+					framework.Failf("Unable to get LoadBalancer ingress address for service %s/%s", e2e.svc.Namespace, e2e.svc.Name)
+				}
+
+				elbClient, err := getAWSClientLoadBalancer(e2e.ctx)
+				framework.ExpectNoError(err, "failed to create AWS ELB client")
+
+				// DescribeLoadBalancers API doesn't support filtering by DNS name directly
+				// Use AWS SDK paginator to search through all load balancers
+				foundLB, err := getAWSLoadBalancerFromDNSName(e2e.ctx, elbClient, hostAddr)
+				framework.ExpectNoError(err, "failed to find load balancer with DNS name %s", hostAddr)
+				if foundLB == nil {
+					framework.Failf("Found load balancer is nil for DNS name %s", hostAddr)
+				}
+
+				lbARN := aws.ToString(foundLB.LoadBalancerArn)
+				if lbARN == "" {
+					framework.Failf("Load balancer ARN is empty for DNS name %s", hostAddr)
+				}
+				framework.Logf("Found load balancer: %s with ARN: %s", aws.ToString(foundLB.LoadBalancerName), lbARN)
+
+				// lookup target group ARN from load balancer ARN
+				targetGroups, err := elbClient.DescribeTargetGroups(e2e.ctx, &elbv2.DescribeTargetGroupsInput{
+					LoadBalancerArn: aws.String(lbARN),
+				})
+				framework.ExpectNoError(err, "failed to describe target groups")
+				gomega.Expect(len(targetGroups.TargetGroups)).To(gomega.Equal(1))
+
+				targetGroupAttributes, err := elbClient.DescribeTargetGroupAttributes(e2e.ctx, &elbv2.DescribeTargetGroupAttributesInput{
+					TargetGroupArn: aws.String(aws.ToString(targetGroups.TargetGroups[0].TargetGroupArn)),
+				})
+				framework.ExpectNoError(err, "failed to describe target group attributes")
+
+				// verify if the target group attributes are set correctly
+
+				annotationToDict := map[string]string{}
+				for _, v := range strings.Split(e2e.svc.Annotations[annotationLBTargetGroupAttributes], ",") {
+					parts := strings.Split(v, "=")
+					annotationToDict[parts[0]] = parts[1]
+				}
+				framework.Logf("TG attribute Annotation to dict: %v", annotationToDict)
+
+				framework.Logf("=== All Target Group Attributes from AWS ===")
+				for _, attr := range targetGroupAttributes.Attributes {
+					framework.Logf("  %s=%s", aws.ToString(attr.Key), aws.ToString(attr.Value))
+				}
+
+				framework.Logf("=== Expected Target Group Attributes from Annotation ===")
+				for key, value := range annotationToDict {
+					framework.Logf("  %s=%s", key, value)
+				}
+
+				// Check if our expected attributes are present and match
+				framework.Logf("=== Verifying Target Group Attributes ===")
+				for _, attr := range targetGroupAttributes.Attributes {
+					if expectedValue, ok := annotationToDict[aws.ToString(attr.Key)]; ok {
+						actualValue := aws.ToString(attr.Value)
+						framework.Logf("Checking attribute: %s", aws.ToString(attr.Key))
+						framework.Logf("  Expected: %s", expectedValue)
+						framework.Logf("  Actual:   %s", actualValue)
+
+						if actualValue != expectedValue {
+							framework.Failf("Target group attribute mismatch for %s: expected %s, got %s", aws.ToString(attr.Key), expectedValue, actualValue)
+						} else {
+							framework.Logf("✓ Target group attribute %s matches expected value %s", aws.ToString(attr.Key), expectedValue)
+						}
+					}
+				}
+			},
 		},
 	}
 
 	serviceNameBase := "lbconfig-test"
 	for _, tc := range cases {
-		It(tc.name, func() {
+		It(tc.name, func(ctx context.Context) {
 			By("setting up test environment and discovering worker nodes")
 			e2e := newE2eTestConfig(cs)
 			e2e.discoverClusterWorkerNode()
 			framework.Logf("[SETUP] Test case: %s", tc.name)
 			framework.Logf("[SETUP] Worker nodes discovered: %d nodes, selector: %s, sample node: %s", e2e.nodeCount, e2e.nodeSelector, e2e.nodeSingleSample)
 
-			loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(cs)
+			loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 			framework.Logf("[CONFIG] AWS load balancer timeout: %s", loadBalancerCreateTimeout)
 
 			By("building service configuration with annotations")
@@ -207,13 +287,45 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 
 			By("waiting for AWS load balancer provisioning")
 			var err error
-			e2e.svc, err = e2e.LBJig.WaitForLoadBalancer(loadBalancerCreateTimeout)
-			framework.ExpectNoError(err)
+			e2e.svc, err = e2e.LBJig.WaitForLoadBalancer(ctx, loadBalancerCreateTimeout)
+			// Collect comprehensive debugging information when LoadBalancer provisioning fails
+			if err != nil {
+				serviceName := e2e.LBJig.Name
+				if e2e.svc != nil {
+					serviceName = e2e.svc.Name
+				}
+				framework.Logf("ERROR: LoadBalancer provisioning failed for service %q: %v", serviceName, err)
+				framework.Logf("ERROR: LoadBalancer provisioning timeout reached after %v", loadBalancerCreateTimeout)
+
+				// Ensure we have detailed debugging information before failing
+				framework.Logf("=== LoadBalancer Provisioning Failure Debug Information ===")
+				gatherEventosOnFailure(e2e.ctx, e2e.kubeClient, e2e.LBJig.Namespace, e2e.LBJig.Name)
+				framework.Logf("=== End of LoadBalancer Provisioning Failure Debug Information ===")
+
+				// Fail the test immediately to prevent further execution
+				framework.ExpectNoError(err, "LoadBalancer provisioning failed - check debug information above")
+			}
 			framework.Logf("[AWS] Load balancer provisioned successfully")
 
 			By("creating backend server pods")
-			_, err = e2e.LBJig.Run(e2e.buildReplicationController(tc.requireAffinity))
-			framework.ExpectNoError(err)
+			_, err = e2e.LBJig.Run(ctx, e2e.buildDeployment(tc.requireAffinity))
+			if err != nil {
+				serviceName := e2e.LBJig.Name
+				if e2e.svc != nil {
+					serviceName = e2e.svc.Name
+				}
+				framework.Logf("ERROR: LoadBalancer provisioning failed for service %q: %v", serviceName, err)
+				framework.Logf("ERROR: LoadBalancer provisioning timeout reached after %v", loadBalancerCreateTimeout)
+
+				// Ensure we have detailed debugging information before failing
+				framework.Logf("=== LoadBalancer Provisioning Failure Debug Information ===")
+				gatherEventosOnFailure(e2e.ctx, e2e.kubeClient, e2e.LBJig.Namespace, e2e.LBJig.Name)
+				framework.Logf("=== End of LoadBalancer Provisioning Failure Debug Information ===")
+
+				// Fail the test immediately to prevent further execution
+				framework.ExpectNoError(err, "LoadBalancer provisioning failed - check debug information above")
+			}
+
 			framework.Logf("[K8S] Backend pods created, affinity required: %t", tc.requireAffinity)
 
 			if tc.hookPostServiceCreate != nil {
@@ -222,15 +334,38 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 			}
 
 			By("collecting service and load balancer information")
+			if e2e.svc == nil {
+				framework.Logf("=== Service Validation Error Debug Information ===")
+				gatherEventosOnFailure(e2e.ctx, e2e.kubeClient, e2e.LBJig.Namespace, e2e.LBJig.Name)
+				framework.Logf("=== End of Service Validation Error Debug Information ===")
+				framework.Failf("Service is nil after LoadBalancer provisioning for service %s", e2e.LBJig.Name)
+			}
 			if len(e2e.svc.Spec.Ports) == 0 {
+				framework.Logf("=== Service Ports Error Debug Information ===")
+				framework.Logf("Service spec: %+v", e2e.svc.Spec)
+				gatherEventosOnFailure(e2e.ctx, e2e.kubeClient, e2e.LBJig.Namespace, e2e.LBJig.Name)
+				framework.Logf("=== End of Service Ports Error Debug Information ===")
 				framework.Failf("No ports found in service spec for service %s/%s", e2e.svc.Namespace, e2e.svc.Name)
 			}
 			if len(e2e.svc.Status.LoadBalancer.Ingress) == 0 {
+				framework.Logf("=== LoadBalancer Ingress Error Debug Information ===")
+				framework.Logf("Service status: %+v", e2e.svc.Status)
+				gatherEventosOnFailure(e2e.ctx, e2e.kubeClient, e2e.LBJig.Namespace, e2e.LBJig.Name)
+				framework.Logf("=== End of LoadBalancer Ingress Error Debug Information ===")
 				framework.Failf("No ingress found in LoadBalancer status for service %s/%s", e2e.svc.Namespace, e2e.svc.Name)
 			}
+
 			svcPort := int(e2e.svc.Spec.Ports[0].Port)
 			ingressAddress := e2eservice.GetIngressPoint(&e2e.svc.Status.LoadBalancer.Ingress[0])
 			framework.Logf("[LB-INFO] Ingress address: %s, port: %d", ingressAddress, svcPort)
+
+			if ingressAddress == "" {
+				framework.Logf("=== Empty Ingress Address Debug Information ===")
+				framework.Logf("LoadBalancer ingress[0]: %+v", e2e.svc.Status.LoadBalancer.Ingress[0])
+				gatherEventosOnFailure(e2e.ctx, e2e.kubeClient, e2e.LBJig.Namespace, e2e.LBJig.Name)
+				framework.Logf("=== End of Empty Ingress Address Debug Information ===")
+				framework.Failf("LoadBalancer ingress address is empty for service %s/%s", e2e.svc.Namespace, e2e.svc.Name)
+			}
 
 			if tc.hookPreTest != nil {
 				By("executing pre-test hook")
@@ -239,7 +374,7 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 
 			// overrideTestRunInClusterReachableHTTP changes the default test function to run the client in the cluster.
 			if tc.overrideTestRunInClusterReachableHTTP {
-				By("testing HTTP connectivity from internal network")
+				By("testing HTTP connectivity for internal load balancer")
 				framework.Logf("[TEST] Running internal connectivity test from node: %s", e2e.nodeSingleSample)
 				err := inClusterTestReachableHTTP(cs, ns.Name, e2e.nodeSingleSample, ingressAddress, svcPort)
 				if err != nil && tc.skipTestFailure {
@@ -247,15 +382,15 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 				}
 				framework.ExpectNoError(err)
 			} else {
-				By("testing HTTP connectivity from external client")
+				By("testing HTTP connectivity for external/internet-facing load balancer")
 				framework.Logf("[TEST] Running external connectivity test to %s:%d", ingressAddress, svcPort)
-				e2eservice.TestReachableHTTP(ingressAddress, svcPort, e2eservice.LoadBalancerLagTimeoutAWS)
+				e2eservice.TestReachableHTTP(ctx, ingressAddress, svcPort, e2eservice.LoadBalancerLagTimeoutAWS)
 			}
 			framework.Logf("[TEST] HTTP connectivity test completed successfully")
 
 			// Update the service to cluster IP
 			By("cleaning up: converting service to ClusterIP")
-			_, err = e2e.LBJig.UpdateService(func(s *v1.Service) {
+			_, err = e2e.LBJig.UpdateService(ctx, func(s *v1.Service) {
 				s.Spec.Type = v1.ServiceTypeClusterIP
 			})
 			framework.ExpectNoError(err)
@@ -263,7 +398,7 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 			// Wait for the load balancer to be destroyed asynchronously
 			By("cleaning up: waiting for load balancer destruction")
 			framework.Logf("[CLEANUP] Waiting for load balancer destruction")
-			_, err = e2e.LBJig.WaitForLoadBalancerDestroy(ingressAddress, svcPort, loadBalancerCreateTimeout)
+			_, err = e2e.LBJig.WaitForLoadBalancerDestroy(ctx, ingressAddress, svcPort, loadBalancerCreateTimeout)
 			framework.ExpectNoError(err)
 			framework.Logf("[CLEANUP] Load balancer destroyed successfully")
 		})
@@ -354,27 +489,24 @@ func (e2e *e2eTestConfig) buildService(portCount int, extraAnnotations map[strin
 	return svc
 }
 
-// buildReplicationController creates a replication controller wrapper for the test framework.
-// buildReplicationController is based on newRCTemplate() from the e2e test framework, which not provide
+// buildDeployment creates a deployment configuration to the network load balancer test framework.
+// buildDeployment is based on newDTemplate() from the e2e test framework, which not provide
 // customization to bind in non-privileged ports.
-// TODO(mtulio): v1.33+[2][3] moved from RC to Deployments on tests, we must do the same to use Run()
-// when the test framework is updated.
-// [1] https://github.com/kubernetes/kubernetes/blob/89d95c9713a8fd189e8ad555120838b3c4f888d1/test/e2e/framework/service/jig.go#L636
-// [2] https://github.com/kubernetes/kubernetes/issues/119021
-// [3] https://github.com/kubernetes/cloud-provider-aws/blob/master/tests/e2e/go.mod#L14
-func (e2e *e2eTestConfig) buildReplicationController(affinity bool) func(rc *v1.ReplicationController) {
-	return func(rc *v1.ReplicationController) {
+func (e2e *e2eTestConfig) buildDeployment(affinity bool) func(deployment *appsv1.Deployment) {
+	return func(deployment *appsv1.Deployment) {
 		var replicas int32 = 1
 		var grace int64 = 3
-		rc.ObjectMeta = metav1.ObjectMeta{
+		deployment.ObjectMeta = metav1.ObjectMeta{
 			Namespace: e2e.LBJig.Namespace,
 			Name:      e2e.LBJig.Name,
 			Labels:    e2e.LBJig.Labels,
 		}
-		rc.Spec = v1.ReplicationControllerSpec{
+		deployment.Spec = appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: e2e.LBJig.Labels,
-			Template: &v1.PodTemplateSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: e2e.LBJig.Labels,
+			},
+			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: e2e.LBJig.Labels,
 				},
@@ -404,7 +536,7 @@ func (e2e *e2eTestConfig) buildReplicationController(affinity bool) func(rc *v1.
 			},
 		}
 		if affinity {
-			rc.Spec.Template.Spec.Affinity = &v1.Affinity{
+			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -531,9 +663,11 @@ func getAWSLoadBalancerFromDNSName(ctx context.Context, elbClient *elbv2.Client,
 	paginator := elbv2.NewDescribeLoadBalancersPaginator(elbClient, &elbv2.DescribeLoadBalancersInput{})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
-		framework.ExpectNoError(err)
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe load balancers: %v", err)
+		}
 
-		framework.Logf("found %d load balancers", len(page.LoadBalancers))
+		framework.Logf("found %d load balancers in page", len(page.LoadBalancers))
 		// Search for the load balancer with matching DNS name in this page
 		for i := range page.LoadBalancers {
 			if aws.ToString(page.LoadBalancers[i].DNSName) == lbDNSName {
@@ -548,7 +682,7 @@ func getAWSLoadBalancerFromDNSName(ctx context.Context, elbClient *elbv2.Client,
 	}
 
 	if foundLB == nil {
-		framework.Failf("No load balancer found with DNS name: %s", lbDNSName)
+		return nil, fmt.Errorf("no load balancer found with DNS name: %s", lbDNSName)
 	}
 
 	return foundLB, nil
@@ -736,4 +870,88 @@ func inClusterTestReachableHTTP(cs clientset.Interface, namespace, nodeName, tar
 	}
 
 	return nil
+}
+
+// Gather information from the cluster to help debug failures.
+// - Resource events
+// - All namespace events
+// - Cloud controller manager logs
+// - Service status
+func gatherResourceEvents(ctx context.Context, cs clientset.Interface, namespace, resourceName string) {
+	framework.Logf("=== Collecting resource events for debugging ===")
+	events, err := cs.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: "involvedObject.name=" + resourceName,
+	})
+	if err != nil {
+		framework.Logf("Error getting events for resource %q: %v", resourceName, err)
+	} else {
+		framework.Logf("Resource events for %q:", resourceName)
+		for _, event := range events.Items {
+			framework.Logf("  [%s] %s/%s: %s - %s", event.Type, event.Reason, event.InvolvedObject.Name, event.Message, event.FirstTimestamp)
+		}
+	}
+}
+
+func gatherAllEvents(ctx context.Context, cs clientset.Interface, namespace, resourceName string) {
+	framework.Logf("=== Collecting all namespace events ===")
+	allEvents, err := cs.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		framework.Logf("Error getting all namespace events: %v", err)
+	} else {
+		framework.Logf("All events in namespace %q:", namespace)
+		for _, event := range allEvents.Items {
+			if strings.Contains(event.Message, "loadbalancer") || strings.Contains(event.Message, "LoadBalancer") ||
+				strings.Contains(event.Reason, "LoadBalancer") || strings.Contains(event.Source.Component, "cloud-controller-manager") {
+				framework.Logf("  [%s] %s/%s/%s: %s - %s", event.Type, event.Source.Component, event.Reason, event.InvolvedObject.Name, event.Message, event.FirstTimestamp)
+			}
+		}
+	}
+}
+
+func gatherControllerLogs(ctx context.Context, cs clientset.Interface, namespace, resourceName string) {
+	framework.Logf("=== Collecting cloud controller manager logs ===")
+	ccmPods, err := cs.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		LabelSelector: "app=cloud-controller-manager",
+	})
+	if err != nil {
+		framework.Logf("Error listing cloud controller manager pods: %v", err)
+	} else {
+		for _, pod := range ccmPods.Items {
+			framework.Logf("Found CCM pod: %s/%s (phase: %s)", pod.Namespace, pod.Name, pod.Status.Phase)
+
+			// Get recent logs (last 50 lines)
+			tailLines := int64(50)
+			logOpts := &v1.PodLogOptions{
+				TailLines: &tailLines,
+				Previous:  false,
+			}
+			logs, err1 := cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, logOpts).DoRaw(ctx)
+			if err1 != nil {
+				framework.Logf("Error getting logs for CCM pod %s/%s: %v", pod.Namespace, pod.Name, err)
+			} else {
+				framework.Logf("Recent logs from CCM pod %s/%s:", pod.Namespace, pod.Name)
+				framework.Logf("%s", string(logs))
+			}
+		}
+	}
+}
+
+func gatherServiceStatus(ctx context.Context, cs clientset.Interface, namespace, resourceName string) {
+	framework.Logf("=== Service Status ===")
+	currentSvc, err := cs.CoreV1().Services(namespace).Get(ctx, resourceName, metav1.GetOptions{})
+	if err != nil {
+		framework.Logf("Error getting current service status: %v", err)
+	} else {
+		framework.Logf("Service %s status:", currentSvc.Name)
+		framework.Logf("  Annotations: %+v", currentSvc.Annotations)
+		framework.Logf("  LoadBalancer status: %+v", currentSvc.Status.LoadBalancer)
+		framework.Logf("  Conditions: %+v", currentSvc.Status.Conditions)
+	}
+}
+
+func gatherEventosOnFailure(ctx context.Context, cs clientset.Interface, namespace, resourceName string) {
+	gatherResourceEvents(ctx, cs, namespace, resourceName)
+	gatherAllEvents(ctx, cs, namespace, resourceName)
+	gatherControllerLogs(ctx, cs, namespace, resourceName)
+	gatherServiceStatus(ctx, cs, namespace, resourceName)
 }
