@@ -61,8 +61,7 @@ func main() {
 	}
 	specs.Walk(func(spec *extensiontests.ExtensionTestSpec) {
 		spec.Name = spec.Name + " [Suite:openshift/conformance/parallel]"
-		spec.Labels.Insert("Conformance", "Parallel")
-	})
+	}).Include(extensiontests.PlatformEquals("aws"))
 	specs.AddBeforeAll(func() {
 		if err := initFrameworkForTest(); err != nil {
 			panic(fmt.Errorf("failed to initialize test framework: %w", err))
