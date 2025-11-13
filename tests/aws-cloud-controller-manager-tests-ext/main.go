@@ -87,22 +87,21 @@ func main() {
 func getRegionFromEnv() string {
 	region := os.Getenv("LEASED_RESOURCE")
 	if len(region) > 0 {
-		log.Infof("Using region from LEASED_RESOURCE: %s", region)
+		log.Debugf("Using region from LEASED_RESOURCE: %s", region)
 		os.Setenv("AWS_REGION", region)
 		return region
 	}
 	region = os.Getenv("AWS_REGION")
 	if len(region) > 0 {
-		log.Infof("Using region from AWS_REGION: %s", region)
+		log.Debugf("Using region from AWS_REGION: %s", region)
 		return region
 	}
 	region = os.Getenv("AWS_DEFAULT_REGION")
 	if len(region) > 0 {
-		log.Infof("Using region from AWS_DEFAULT_REGION: %s", region)
+		log.Debugf("Using region from AWS_DEFAULT_REGION: %s", region)
 		os.Setenv("AWS_REGION", region)
 		return region
 	}
-	log.Infof("No region found in env")
 	return ""
 }
 
