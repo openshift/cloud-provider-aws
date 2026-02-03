@@ -59,8 +59,24 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("failed to select specs: %w", err))
 	}
+
+	// Skip set of tests when topology is SingleReplica.
+	singleReplicaSkips := []string{
+		"nodes should label nodes with topology network info if instance is supported",
+		"nodes should set zone-id topology label",
+	}
+
+	// Add the suite name to the spec name and apply topology-based exclusions.
 	specs.Walk(func(spec *extensiontests.ExtensionTestSpec) {
 		spec.Name = spec.Name + " [Suite:openshift/conformance/parallel]"
+
+		// Exclude specific tests when topology is SingleReplica.
+		for _, skip := range singleReplicaSkips {
+			if strings.Contains(spec.Name, skip) {
+				spec.Exclude(extensiontests.TopologyEquals("SingleReplica"))
+			}
+		}
+
 	}).Include(extensiontests.PlatformEquals("aws"))
 	specs.AddBeforeAll(func() {
 		if err := initFrameworkForTest(); err != nil {
@@ -72,7 +88,7 @@ func main() {
 	registry.Register(ext)
 
 	root := &cobra.Command{
-		Long: "Machine API Operator tests extension for OpenShift",
+		Long: "AWS Cloud Controller Manager tests extension for OpenShift",
 	}
 	root.AddCommand(cmd.DefaultExtensionCommands(registry)...)
 	if err := func() error {
