@@ -48,7 +48,10 @@ func (m *MockedECR) GetAuthorizationToken(ctx context.Context, params *ecr.GetAu
 		fn(&opts)
 	}
 	if opts.Credentials != nil {
-		opts.Credentials.Retrieve(ctx)
+		_, err := opts.Credentials.Retrieve(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if args.Get(1) != nil {
@@ -64,6 +67,18 @@ type MockedECRPublic struct {
 
 func (m *MockedECRPublic) GetAuthorizationToken(ctx context.Context, params *ecrpublic.GetAuthorizationTokenInput, optFns ...func(*ecrpublic.Options)) (*ecrpublic.GetAuthorizationTokenOutput, error) {
 	args := m.Called(ctx, params)
+
+	opts := ecrpublic.Options{}
+	for _, fn := range optFns {
+		fn(&opts)
+	}
+	if opts.Credentials != nil {
+		_, err := opts.Credentials.Retrieve(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if args.Get(1) != nil {
 		return args.Get(0).(*ecrpublic.GetAuthorizationTokenOutput), args.Get(1).(error)
 	}
@@ -244,8 +259,7 @@ func Test_GetCredentials_PrivateForServiceAccount(t *testing.T) {
 					SessionToken:    aws.String("session-token"),
 				},
 			},
-			response:      generateResponse("123456789123.dkr.ecr.us-west-2.amazonaws.com", "user", "pass"),
-			expectedError: errors.New("no arn provided, cannot assume role using ServiceAccountToken"),
+			response: generateResponse("123456789123.dkr.ecr.us-west-2.amazonaws.com", "user", "pass"),
 		},
 		{
 			name:                           "assume error",
@@ -254,7 +268,7 @@ func Test_GetCredentials_PrivateForServiceAccount(t *testing.T) {
 			getAuthorizationTokenOutput:    generatePrivateGetAuthorizationTokenOutput("user", "pass", "", nil),
 			assumeRoleWithWebIdentityError: errors.New("injected error"),
 			response:                       generateResponse("123456789123.dkr.ecr.us-west-2.amazonaws.com", "user", "pass"),
-			expectedError:                  errors.New("injected error"),
+			expectedError:                  errors.New("failed to assume role: injected error"),
 		},
 	}
 	for _, testcase := range testcases {
@@ -271,15 +285,15 @@ func Test_GetCredentials_PrivateForServiceAccount(t *testing.T) {
 			}
 			mockSTS.On("AssumeRoleWithWebIdentity", mock.Anything, &expectedInput).Return(testcase.assumeRoleWithWebIdentityOutput, testcase.assumeRoleWithWebIdentityError)
 			creds, err := p.GetCredentials(context.TODO(), testcase.request, testcase.args)
-			if err != nil {
-				if testcase.expectedError == nil {
-					t.Fatalf("got unexpected error %s", err.Error())
+			if err == nil && testcase.expectedError != nil {
+				t.Fatalf("expected error '%s' but got no error", testcase.expectedError)
+			}
+			if err != nil && testcase.expectedError == nil {
+				t.Fatalf("got unexpected error %s", err.Error())
+			}
 
-				}
-
-				if testcase.expectedError.Error() != err.Error() {
-					t.Fatalf("expected %s, got %s", testcase.expectedError.Error(), err.Error())
-				}
+			if err != nil && testcase.expectedError.Error() != err.Error() {
+				t.Fatalf("expected %s, got %s", testcase.expectedError.Error(), err.Error())
 			}
 
 			if testcase.expectedError == nil {
@@ -382,7 +396,6 @@ func Test_GetCredentials_Public(t *testing.T) {
 			mockECRPublic.On("GetAuthorizationToken", mock.Anything, mock.Anything).Return(testcase.getAuthorizationTokenOutput, testcase.getAuthorizationTokenError)
 
 			creds, err := p.GetCredentials(context.TODO(), &v1.CredentialProviderRequest{Image: testcase.image}, testcase.args)
-
 			if testcase.expectedError != nil && (testcase.expectedError.Error() != err.Error()) {
 				t.Fatalf("expected %s, got %s", testcase.expectedError.Error(), err.Error())
 			}
@@ -476,6 +489,12 @@ func Test_parseRegionFromECRPrivateHost(t *testing.T) {
 			host:   "123456789123.dkr.ecr.us-iso-east-1.c2s.ic.gov",
 			region: "us-iso-east-1",
 		},
+		// EUSC
+		{
+			name:   "success",
+			host:   "123456789123.dkr.ecr.eusc-de-east-1.amazonaws.eu",
+			region: "eusc-de-east-1",
+		},
 		// Dual-Stack
 		{
 			name:   "success",
@@ -535,6 +554,10 @@ func TestRegistryPatternMatch(t *testing.T) {
 		{"123456789012.dkr.ecr-fips.lala-land-1.amazonaws.com", true},
 		// .cn
 		{"123456789012.dkr.ecr.lala-land-1.amazonaws.com.cn", true},
+		// .eu
+		{"123456789012.dkr.ecr.eusc-de-east-1.amazonaws.eu", true},
+		// .eu with fips
+		{"123456789012.dkr.ecr-fips.eusc-de-east-1.amazonaws.eu", true},
 		// registry ID too long
 		{"1234567890123.dkr.ecr.lala-land-1.amazonaws.com", false},
 		// registry ID too short
