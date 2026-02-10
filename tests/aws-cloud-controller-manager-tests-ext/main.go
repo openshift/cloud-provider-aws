@@ -20,6 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	// Importing ginkgo tests from the CCM e2e package
+	_ "k8s.io/cloud-provider-aws/tests/aws-cloud-controller-manager-tests-ext/e2e"
 	_ "k8s.io/cloud-provider-aws/tests/e2e"
 )
 
@@ -55,6 +56,7 @@ func main() {
 	specs, err = specs.MustSelectAny([]extensiontests.SelectFunction{
 		extensiontests.NameContains("[cloud-provider-aws-e2e] loadbalancer"),
 		extensiontests.NameContains("[cloud-provider-aws-e2e] nodes"),
+		extensiontests.NameContains("[cloud-provider-aws-e2e-openshift]"),
 	})
 	if err != nil {
 		panic(fmt.Errorf("failed to select specs: %w", err))
