@@ -2,6 +2,8 @@ module k8s.io/cloud-provider-aws
 
 go 1.24.0
 
+replace k8s.io/cloud-provider => github.com/damdo/kubernetes/staging/src/k8s.io/cloud-provider v0.0.0-20260212112325-699c1731c2b6
+
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
 	github.com/aws/aws-sdk-go-v2 v1.38.3
