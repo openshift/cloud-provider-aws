@@ -521,7 +521,11 @@ func (e2e *e2eTestConfig) buildDeployment(affinity bool) func(deployment *appsv1
 								fmt.Sprintf("--udp-port=%d", e2e.cfgPodPort),
 							},
 							ReadinessProbe: &v1.Probe{
-								PeriodSeconds: 3,
+								// Give netexec time to bind to the port and serve /hostName before first probe.
+								// Without this, probes can fail on slower nodes (e.g. edge zones) and the deployment
+								// never reaches ReadyReplicas, causing "LoadBalancer provisioning failed".
+								InitialDelaySeconds: 10,
+								PeriodSeconds:       3,
 								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
 										Port: intstr.FromInt(int(e2e.cfgPodPort)),
