@@ -44,6 +44,7 @@ aws-cloud-controller-manager:
 		cmd/aws-cloud-controller-manager/main.go
 
 .PHONY: ecr-credential-provider
+ecr-credential-provider: LDFLAGS = -w -s -X k8s.io/component-base/version.gitVersion=$(VERSION) -X main.gitVersion=$(VERSION)
 ecr-credential-provider:
 	 GO111MODULE=on CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOPROXY=$(GOPROXY) go build \
 		-trimpath \
