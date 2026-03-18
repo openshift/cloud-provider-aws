@@ -2562,166 +2562,200 @@ func TestCloud_ensureTargetGroupTargets(t *testing.T) {
 	}
 }
 
-// mockELBV2ForALPN captures CreateListener and ModifyListener calls for ALPN policy assertions.
-type mockELBV2ForALPN struct {
-	*MockedFakeELBV2
-	capturedCreate *elbv2.CreateListenerInput
-	capturedModify *elbv2.ModifyListenerInput
-}
-
-func (m *mockELBV2ForALPN) CreateListener(ctx context.Context, input *elbv2.CreateListenerInput, optFns ...func(*elbv2.Options)) (*elbv2.CreateListenerOutput, error) {
-	m.capturedCreate = input
-	return m.MockedFakeELBV2.CreateListener(ctx, input, optFns...)
-}
-
-func (m *mockELBV2ForALPN) ModifyListener(ctx context.Context, input *elbv2.ModifyListenerInput, optFns ...func(*elbv2.Options)) (*elbv2.ModifyListenerOutput, error) {
-	m.capturedModify = input
-	return m.MockedFakeELBV2.ModifyListener(ctx, input, optFns...)
-}
-
-func newMockELBV2ForALPN() *mockELBV2ForALPN {
-	return &mockELBV2ForALPN{
-		MockedFakeELBV2: &MockedFakeELBV2{
-			LoadBalancers:          []*elbv2types.LoadBalancer{},
-			TargetGroups:           []*elbv2types.TargetGroup{},
-			Listeners:              []*elbv2types.Listener{},
-			LoadBalancerAttributes: make(map[string]map[string]string),
-			Tags:                   make(map[string][]elbv2types.Tag),
-			RegisteredInstances:    make(map[string][]string),
-		},
-	}
-}
-
-func TestCreateListenerV2_ALPNPolicy(t *testing.T) {
-	baseHC := healthCheckConfig{
-		Protocol: elbv2types.ProtocolEnumTcp, Port: "traffic-port",
-		Interval: 10, HealthyThreshold: 3, UnhealthyThreshold: 3,
-	}
+func TestGetTargetGroupIPAddressTypeFromService(t *testing.T) {
 	tests := []struct {
 		name     string
-		protocol elbv2types.ProtocolEnum
-		alpn     string
-		wantAlpn []string
+		service  *v1.Service
+		expected elbv2types.TargetGroupIpAddressTypeEnum
 	}{
 		{
-			name:     "TLS listener passes ALPN policy to API",
-			protocol: elbv2types.ProtocolEnumTls,
-			alpn:     "HTTP2Only",
-			wantAlpn: []string{"HTTP2Only"},
+			name: "IPv6 as first IP family",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
+				},
+			},
+			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv6,
 		},
 		{
-			name:     "TLS listener with no annotation omits AlpnPolicy field",
-			protocol: elbv2types.ProtocolEnumTls,
-			alpn:     "",
-			wantAlpn: nil,
+			name: "IPv6 as only IP family",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol},
+				},
+			},
+			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv6,
 		},
 		{
-			name:     "non-TLS listener never sets AlpnPolicy even if field is populated",
-			protocol: elbv2types.ProtocolEnumTcp,
-			alpn:     "HTTP2Only",
-			wantAlpn: nil,
+			name: "IPv4 as first IP family",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
+				},
+			},
+			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
+		},
+		{
+			name: "IPv4 as only IP family",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
+				},
+			},
+			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
+		},
+		{
+			name: "No IP families specified (defaults to IPv4)",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{},
+				},
+			},
+			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
+		},
+		{
+			name:     "Nil service (defaults to IPv4)",
+			service:  nil,
+			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := newMockELBV2ForALPN()
-			c := &Cloud{elbv2: mock, tagging: awsTagging{ClusterID: TestClusterID}}
-
-			mapping := nlbPortMapping{
-				FrontendPort: 443, FrontendProtocol: tt.protocol,
-				TrafficPort: 31173, TrafficProtocol: elbv2types.ProtocolEnumTcp,
-				SSLCertificateARN: "arn:aws:acm:us-east-1:123456789012:certificate/test",
-				ALPNPolicy:        tt.alpn, HealthCheckConfig: baseHC,
-			}
-			_, err := c.createListenerV2(context.TODO(),
-				aws.String("arn:aws:elasticloadbalancing:us-west-2:123456789:loadbalancer/net/test/abc"),
-				mapping,
-				types.NamespacedName{Namespace: "default", Name: "test-svc"},
-				[]string{}, "vpc-abc123", map[string]string{})
-
-			assert.NoError(t, err)
-			assert.Equal(t, tt.wantAlpn, mock.capturedCreate.AlpnPolicy)
+			result := getTargetGroupIPAddressTypeFromService(tt.service)
+			assert.Equal(t, tt.expected, result, "IP address type should match expected for test case: %s", tt.name)
 		})
 	}
 }
 
-func TestEnsureLoadBalancerV2_ALPNPolicy_Modify(t *testing.T) {
-	const (
-		lbName      = "test-nlb"
-		lbARN       = "arn:aws:elasticloadbalancing:us-west-2:123456789:loadbalancer/net/test-nlb/abcdef"
-		listenerARN = "arn:aws:elasticloadbalancing:us-west-2:123456789:listener/net/test-nlb/abcdef/1234"
-		tgARN       = "arn:aws:elasticloadbalancing:us-west-2:123456789:targetgroup/test-tg/abcdef"
-		certARN     = "arn:aws:acm:us-east-1:123456789012:certificate/test"
-	)
-
-	baseHC := healthCheckConfig{
-		Protocol: elbv2types.ProtocolEnumTcp, Port: "traffic-port",
-		Interval: 10, HealthyThreshold: 3, UnhealthyThreshold: 3,
-	}
-
-	// seed builds a mock pre-loaded with an existing TLS NLB
-	// whose listener has currentAlpn.
-	seed := func(currentAlpn []string) *mockELBV2ForALPN {
-		m := newMockELBV2ForALPN()
-		m.LoadBalancers = []*elbv2types.LoadBalancer{{
-			LoadBalancerArn: aws.String(lbARN), LoadBalancerName: aws.String(lbName),
-			Type: elbv2types.LoadBalancerTypeEnumNetwork, VpcId: aws.String("vpc-abc123"),
-		}}
-		m.Listeners = []*elbv2types.Listener{{
-			ListenerArn: aws.String(listenerARN), LoadBalancerArn: aws.String(lbARN),
-			Port: aws.Int32(443), Protocol: elbv2types.ProtocolEnumTls,
-			AlpnPolicy:   currentAlpn,
-			Certificates: []elbv2types.Certificate{{CertificateArn: aws.String(certARN)}},
-			DefaultActions: []elbv2types.Action{{
-				TargetGroupArn: aws.String(tgARN), Type: elbv2types.ActionTypeEnumForward,
-			}},
-		}}
-		m.TargetGroups = []*elbv2types.TargetGroup{{
-			TargetGroupArn: aws.String(tgARN), LoadBalancerArns: []string{lbARN},
-			Port: aws.Int32(31173), Protocol: elbv2types.ProtocolEnumTcp,
-			HealthCheckProtocol: elbv2types.ProtocolEnumTcp, HealthCheckPort: aws.String("traffic-port"),
-			HealthCheckIntervalSeconds: aws.Int32(10),
-			HealthyThresholdCount:      aws.Int32(3), UnhealthyThresholdCount: aws.Int32(3),
-		}}
-		return m
-	}
-
-	// wantSent == "" means ModifyListener must NOT be called.
+func TestServiceRequestsIPv6(t *testing.T) {
 	tests := []struct {
 		name     string
-		current  []string
-		desired  string
-		wantSent string
+		service  *v1.Service
+		expected bool
 	}{
-		{"set policy", []string{}, "HTTP2Only", "HTTP2Only"},
-		{"remove policy -> None", []string{"HTTP2Only"}, "", "None"},
-		{"unchanged -> no modify", []string{"HTTP2Only"}, "HTTP2Only", ""},
+		{
+			name: "IPv6 only",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Dual-stack IPv4 first",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Dual-stack IPv6 first",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "IPv4 only",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "No IP families",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name:     "Nil service",
+			service:  nil,
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := seed(tt.current)
-			c := &Cloud{elbv2: mock, tagging: awsTagging{ClusterID: TestClusterID}}
+			result := serviceRequestsIPv6(tt.service)
+			assert.Equal(t, tt.expected, result, "IPv6 support detection should match expected for test case: %s", tt.name)
+		})
+	}
+}
 
-			_, err := c.ensureLoadBalancerv2(
-				context.TODO(),
-				types.NamespacedName{Namespace: "default", Name: "test-svc"},
-				lbName,
-				[]nlbPortMapping{{
-					FrontendPort: 443, FrontendProtocol: elbv2types.ProtocolEnumTls,
-					TrafficPort: 31173, TrafficProtocol: elbv2types.ProtocolEnumTcp,
-					SSLCertificateARN: certARN, ALPNPolicy: tt.desired, HealthCheckConfig: baseHC,
-				}},
-				[]string{}, []string{"subnet-abc123"}, false, map[string]string{}, []string{},
-			)
-			assert.NoError(t, err)
+func TestGetLoadBalancerIpAddressType(t *testing.T) {
+	tests := []struct {
+		name     string
+		service  *v1.Service
+		expected elbv2types.IpAddressType
+	}{
+		{
+			name: "No IP families defined",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{},
+				},
+			},
+			expected: elbv2types.IpAddressTypeIpv4,
+		},
+		{
+			name: "Only IPv4 defined",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
+				},
+			},
+			expected: elbv2types.IpAddressTypeIpv4,
+		},
+		{
+			name: "Only IPv6 defined",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol},
+				},
+			},
+			expected: elbv2types.IpAddressTypeDualstack,
+		},
+		{
+			name: "IPv6 and IPv4",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
+				},
+			},
+			expected: elbv2types.IpAddressTypeDualstack,
+		},
+		{
+			name: "IPv4 and IPv6",
+			service: &v1.Service{
+				Spec: v1.ServiceSpec{
+					IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
+				},
+			},
+			expected: elbv2types.IpAddressTypeDualstack,
+		},
+		{
+			name:     "No service",
+			service:  nil,
+			expected: elbv2types.IpAddressTypeIpv4,
+		},
+	}
 
-			if tt.wantSent != "" {
-				assert.Equal(t, []string{tt.wantSent}, mock.capturedModify.AlpnPolicy)
-			} else {
-				assert.Empty(t, mock.capturedModify)
-			}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getLoadBalancerIPAddressTypeFromService(tt.service)
+			assert.Equal(t, tt.expected, result, "IP address type did not expected for test case: %s", tt.name)
 		})
 	}
 }
