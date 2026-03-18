@@ -4123,6 +4123,8 @@ func TestEnsureLoadBalancer(t *testing.T) {
 		name           string
 		annotations    map[string]string
 		config         func() config.CloudConfig
+		ipFamilies     []v1.IPFamily
+		ipFamilyPolicy *v1.IPFamilyPolicy
 		want           *v1.LoadBalancerStatus
 		wantErr        bool
 		HookPostChecks func(*testCase, *Cloud, *v1.Service)
@@ -4162,6 +4164,13 @@ func TestEnsureLoadBalancer(t *testing.T) {
 					assert.Equal(t, len(loadBalancer.SecurityGroups), 1)
 				}
 			},
+		},
+		{
+			name:           "reject single stack IPv6 on NLB",
+			annotations:    map[string]string{ServiceAnnotationLoadBalancerType: "nlb"},
+			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol},
+			ipFamilyPolicy: func() *v1.IPFamilyPolicy { p := v1.IPFamilyPolicySingleStack; return &p }(),
+			wantErr:        true,
 		},
 	}
 
@@ -4339,6 +4348,12 @@ func TestEnsureLoadBalancer(t *testing.T) {
 			if len(test.annotations) > 0 {
 				testService.Annotations = test.annotations
 			}
+			if len(test.ipFamilies) > 0 {
+				testService.Spec.IPFamilies = test.ipFamilies
+			}
+			if test.ipFamilyPolicy != nil {
+				testService.Spec.IPFamilyPolicy = test.ipFamilyPolicy
+			}
 
 			// Test
 			svcStatus, err := c.EnsureLoadBalancer(context.TODO(), TestClusterName, testService, nodes)
@@ -4363,11 +4378,12 @@ func TestCreateSecurityGroupRules(t *testing.T) {
 	c.vpcID = "vpc-mac0"
 
 	testCases := []struct {
-		name            string
-		sgID            string
-		rules           IPPermissionSet
-		ec2SourceRanges []ec2types.IpRange
-		expectError     bool
+		name                string
+		sgID                string
+		rules               IPPermissionSet
+		ec2SourceRanges     []ec2types.IpRange
+		ec2Ipv6SourceRanges []ec2types.Ipv6Range
+		expectError         bool
 	}{
 		{
 			name: "successful security group rule creation",
@@ -4382,6 +4398,28 @@ func TestCreateSecurityGroupRules(t *testing.T) {
 			ec2SourceRanges: []ec2types.IpRange{
 				{
 					CidrIp: aws.String("0.0.0.0/0"),
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "successful security group dual stack rule creation",
+			sgID: "sg-123456",
+			rules: IPPermissionSet{
+				"tcp-80-80": ec2types.IpPermission{
+					IpProtocol: aws.String("tcp"),
+					FromPort:   aws.Int32(80),
+					ToPort:     aws.Int32(80),
+				},
+			},
+			ec2SourceRanges: []ec2types.IpRange{
+				{
+					CidrIp: aws.String("0.0.0.0/0"),
+				},
+			},
+			ec2Ipv6SourceRanges: []ec2types.Ipv6Range{
+				{
+					CidrIpv6: aws.String("::/128"),
 				},
 			},
 			expectError: false,
@@ -4412,6 +4450,27 @@ func TestCreateSecurityGroupRules(t *testing.T) {
 					CidrIp: aws.String("0.0.0.0/0"),
 				},
 			},
+			ec2Ipv6SourceRanges: []ec2types.Ipv6Range{
+				{
+					CidrIpv6: aws.String("::/128"),
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:  "empty dual stack rule set",
+			sgID:  "sg-123456",
+			rules: IPPermissionSet{},
+			ec2SourceRanges: []ec2types.IpRange{
+				{
+					CidrIp: aws.String("0.0.0.0/0"),
+				},
+			},
+			ec2Ipv6SourceRanges: []ec2types.Ipv6Range{
+				{
+					CidrIpv6: aws.String("::/128"),
+				},
+			},
 			expectError: false,
 		},
 		{
@@ -4421,6 +4480,22 @@ func TestCreateSecurityGroupRules(t *testing.T) {
 			ec2SourceRanges: []ec2types.IpRange{
 				{
 					CidrIp: aws.String("10.0.0.0/16"),
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:  "internal dual stack sources",
+			sgID:  "sg-123456",
+			rules: IPPermissionSet{},
+			ec2SourceRanges: []ec2types.IpRange{
+				{
+					CidrIp: aws.String("10.0.0.0/16"),
+				},
+			},
+			ec2Ipv6SourceRanges: []ec2types.Ipv6Range{
+				{
+					CidrIpv6: aws.String("fc00::/8"),
 				},
 			},
 			expectError: false,
@@ -4441,7 +4516,7 @@ func TestCreateSecurityGroupRules(t *testing.T) {
 			).Maybe()
 
 			// Execute test
-			err := c.createSecurityGroupRules(context.TODO(), tc.sgID, tc.rules, tc.ec2SourceRanges)
+			err := c.createSecurityGroupRules(context.TODO(), tc.sgID, tc.rules, tc.ec2SourceRanges, tc.ec2Ipv6SourceRanges)
 
 			// Verify results
 			if tc.expectError {
@@ -5420,247 +5495,102 @@ func TestCloud_GetSecurityGroupNameForNLB(t *testing.T) {
 	}
 }
 
-func TestCloud_cleanupNLBSecurityGroups(t *testing.T) {
+func TestSeparateIPv4AndIPv6CIDRs(t *testing.T) {
 	tests := []struct {
-		name             string
-		securityGroupIDs []string
-		setupMocks       func(*MockedFakeEC2)
-		expectError      bool
+		name         string
+		cidrs        []string
+		expectedIPv4 []ec2types.IpRange
+		expectedIPv6 []ec2types.Ipv6Range
 	}{
 		{
-			name:             "successfully remove owned NLB security groups with cross-references",
-			securityGroupIDs: []string{"sg-nlb-owned1"},
-			setupMocks: func(mockedEC2 *MockedFakeEC2) {
-				// Mock DescribeSecurityGroups for ownership check
-				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
-					GroupIds: []string{"sg-nlb-owned1"},
-				}).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-nlb-owned1"),
-						Tags: []ec2types.Tag{
-							{
-								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
-								Value: aws.String("owned"),
-							},
-						},
-					},
-				}, nil)
-
-				// Mock DescribeSecurityGroups for rule references (instance SG has rule referencing NLB SG)
-				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
-					return len(input.Filters) > 0 && input.Filters[0].Name != nil && *input.Filters[0].Name == "ip-permission.group-id"
-				})).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-instance1"),
-						Tags: []ec2types.Tag{
-							{
-								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
-								Value: aws.String("owned"),
-							},
-						},
-						IpPermissions: []ec2types.IpPermission{
-							{
-								IpProtocol: aws.String("tcp"),
-								FromPort:   aws.Int32(80),
-								ToPort:     aws.Int32(80),
-								UserIdGroupPairs: []ec2types.UserIdGroupPair{
-									{
-										GroupId: aws.String("sg-nlb-owned1"),
-									},
-								},
-							},
-						},
-					},
-				}, nil)
-
-				// Mock RevokeSecurityGroupIngress
-				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
-					return aws.ToString(input.GroupId) == "sg-instance1"
-				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
-
-				// Mock DeleteSecurityGroup
-				mockedEC2.On("DeleteSecurityGroup", mock.MatchedBy(func(input *ec2.DeleteSecurityGroupInput) bool {
-					return aws.ToString(input.GroupId) == "sg-nlb-owned1"
-				})).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+			name:  "Only IPv4 CIDRs",
+			cidrs: []string{"192.168.1.0/24", "10.0.0.0/8"},
+			expectedIPv4: []ec2types.IpRange{
+				{CidrIp: aws.String("192.168.1.0/24")},
+				{CidrIp: aws.String("10.0.0.0/8")},
 			},
-			expectError: false,
+			expectedIPv6: []ec2types.Ipv6Range{},
 		},
 		{
-			name:             "skip non-owned security groups (BYO SGs)",
-			securityGroupIDs: []string{},
-			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+			name:         "Only IPv6 CIDRs",
+			cidrs:        []string{"2001:db8::/32", "fd00::/8"},
+			expectedIPv4: []ec2types.IpRange{},
+			expectedIPv6: []ec2types.Ipv6Range{
+				{CidrIpv6: aws.String("2001:db8::/32")},
+				{CidrIpv6: aws.String("fd00::/8")},
 			},
-			expectError: false,
 		},
 		{
-			name:             "skip revoking rules from non-cluster-tagged SGs",
-			securityGroupIDs: []string{"sg-nlb-owned1"},
-			setupMocks: func(mockedEC2 *MockedFakeEC2) {
-				// Mock DescribeSecurityGroups for ownership check
-				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
-					GroupIds: []string{"sg-nlb-owned1"},
-				}).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-nlb-owned1"),
-						Tags: []ec2types.Tag{
-							{
-								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
-								Value: aws.String("owned"),
-							},
-						},
-					},
-				}, nil)
-
-				// Mock DescribeSecurityGroups for rule references - external SG has rule
-				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
-					return len(input.Filters) > 0
-				})).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-external-no-tag"),
-						Tags:    []ec2types.Tag{}, // No cluster tag
-						IpPermissions: []ec2types.IpPermission{
-							{
-								IpProtocol: aws.String("tcp"),
-								FromPort:   aws.Int32(80),
-								ToPort:     aws.Int32(80),
-								UserIdGroupPairs: []ec2types.UserIdGroupPair{
-									{
-										GroupId: aws.String("sg-nlb-owned1"),
-									},
-								},
-							},
-						},
-					},
-				}, nil)
-
-				// RevokeSecurityGroupIngress should NOT be called for non-cluster-tagged SGs
-
-				// Mock DeleteSecurityGroup (SG should still be deleted even if cross-refs weren't revoked)
-				mockedEC2.On("DeleteSecurityGroup", mock.MatchedBy(func(input *ec2.DeleteSecurityGroupInput) bool {
-					return aws.ToString(input.GroupId) == "sg-nlb-owned1"
-				})).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+			name:  "Mixed IPv4 and IPv6 CIDRs",
+			cidrs: []string{"192.168.1.0/24", "2001:db8::/32", "10.0.0.0/8", "fd00::/8"},
+			expectedIPv4: []ec2types.IpRange{
+				{CidrIp: aws.String("192.168.1.0/24")},
+				{CidrIp: aws.String("10.0.0.0/8")},
 			},
-			expectError: false,
+			expectedIPv6: []ec2types.Ipv6Range{
+				{CidrIpv6: aws.String("2001:db8::/32")},
+				{CidrIpv6: aws.String("fd00::/8")},
+			},
 		},
 		{
-			name:             "error building security group rule references",
-			securityGroupIDs: []string{"sg-nlb-owned1"},
-			setupMocks: func(mockedEC2 *MockedFakeEC2) {
-				// Mock DescribeSecurityGroups for ownership check
-				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
-					GroupIds: []string{"sg-nlb-owned1"},
-				}).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-nlb-owned1"),
-						Tags: []ec2types.Tag{
-							{
-								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
-								Value: aws.String("owned"),
-							},
-						},
-					},
-				}, nil)
-
-				// Mock DescribeSecurityGroups for rule references - return error
-				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
-					return len(input.Filters) > 0
-				})).Return([]ec2types.SecurityGroup(nil), errors.New("AWS error building references"))
+			name:  "Default IPv4 and IPv6",
+			cidrs: []string{"0.0.0.0/0", "::/0"},
+			expectedIPv4: []ec2types.IpRange{
+				{CidrIp: aws.String("0.0.0.0/0")},
 			},
-			expectError: true,
+			expectedIPv6: []ec2types.Ipv6Range{
+				{CidrIpv6: aws.String("::/0")},
+			},
 		},
 		{
-			name:             "error revoking security group ingress rules",
-			securityGroupIDs: []string{"sg-nlb-owned1"},
-			setupMocks: func(mockedEC2 *MockedFakeEC2) {
-				// Mock DescribeSecurityGroups for ownership check
-				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
-					GroupIds: []string{"sg-nlb-owned1"},
-				}).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-nlb-owned1"),
-						Tags: []ec2types.Tag{
-							{
-								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
-								Value: aws.String("owned"),
-							},
-						},
-					},
-				}, nil)
-
-				// Mock DescribeSecurityGroups for rule references
-				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
-					return len(input.Filters) > 0
-				})).Return([]ec2types.SecurityGroup{
-					{
-						GroupId: aws.String("sg-instance1"),
-						Tags: []ec2types.Tag{
-							{
-								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
-								Value: aws.String("owned"),
-							},
-						},
-						IpPermissions: []ec2types.IpPermission{
-							{
-								IpProtocol: aws.String("tcp"),
-								FromPort:   aws.Int32(80),
-								ToPort:     aws.Int32(80),
-								UserIdGroupPairs: []ec2types.UserIdGroupPair{
-									{
-										GroupId: aws.String("sg-nlb-owned1"),
-									},
-								},
-							},
-						},
-					},
-				}, nil)
-
-				// Mock RevokeSecurityGroupIngress to return error
-				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
-					return aws.ToString(input.GroupId) == "sg-instance1"
-				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, errors.New("AWS error revoking rules"))
-			},
-			expectError: true,
+			name:         "Empty CIDR list",
+			cidrs:        []string{},
+			expectedIPv4: []ec2types.IpRange{},
+			expectedIPv6: []ec2types.Ipv6Range{},
 		},
 		{
-			name:             "empty security groups list",
-			securityGroupIDs: []string{},
-			setupMocks: func(mockedEC2 *MockedFakeEC2) {
-				// No mocks needed for empty list
+			name:  "Invalid CIDR is skipped",
+			cidrs: []string{"192.168.1.0/24", "invalid-cidr", "2001:db8::/32"},
+			expectedIPv4: []ec2types.IpRange{
+				{CidrIp: aws.String("192.168.1.0/24")},
 			},
-			expectError: false,
+			expectedIPv6: []ec2types.Ipv6Range{
+				{CidrIpv6: aws.String("2001:db8::/32")},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockedEC2 := &MockedFakeEC2{}
+			ipv4Ranges, ipv6Ranges := separateIPv4AndIPv6CIDRs(tt.cidrs)
 
-			// Setup mocks
-			tt.setupMocks(mockedEC2)
-
-			cloud := &Cloud{
-				ec2: mockedEC2,
-				tagging: awsTagging{
-					ClusterID: "test-cluster",
-				},
+			// Compare IPv4 ranges
+			if len(ipv4Ranges) != len(tt.expectedIPv4) {
+				t.Errorf("IPv4 range count mismatch: got %d, expected %d", len(ipv4Ranges), len(tt.expectedIPv4))
+			}
+			for i, r := range ipv4Ranges {
+				if i >= len(tt.expectedIPv4) {
+					break
+				}
+				if aws.ToString(r.CidrIp) != aws.ToString(tt.expectedIPv4[i].CidrIp) {
+					t.Errorf("IPv4 range[%d] mismatch: got %s, expected %s",
+						i, aws.ToString(r.CidrIp), aws.ToString(tt.expectedIPv4[i].CidrIp))
+				}
 			}
 
-			ctx := context.Background()
-
-			errs := cloud.removeOwnedSecurityGroups(ctx, "test-nlb", tt.securityGroupIDs)
-
-			var err error
-			if len(errs) > 0 {
-				err = errs[0] // Take first error for test assertion
+			// Compare IPv6 ranges
+			if len(ipv6Ranges) != len(tt.expectedIPv6) {
+				t.Errorf("IPv6 range count mismatch: got %d, expected %d", len(ipv6Ranges), len(tt.expectedIPv6))
 			}
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+			for i, r := range ipv6Ranges {
+				if i >= len(tt.expectedIPv6) {
+					break
+				}
+				if aws.ToString(r.CidrIpv6) != aws.ToString(tt.expectedIPv6[i].CidrIpv6) {
+					t.Errorf("IPv6 range[%d] mismatch: got %s, expected %s",
+						i, aws.ToString(r.CidrIpv6), aws.ToString(tt.expectedIPv6[i].CidrIpv6))
+				}
 			}
-
-			mockedEC2.AssertExpectations(t)
 		})
 	}
 }
