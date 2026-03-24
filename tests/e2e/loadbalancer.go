@@ -16,6 +16,8 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -180,12 +182,12 @@ var _ = Describe("[cloud-provider-aws-e2e] loadbalancer", func() {
 					framework.Failf("Unable to get LoadBalancer ingress address for service %s/%s", e2e.svc.Namespace, e2e.svc.Name)
 				}
 
-				elbClient, err := getAWSClientLoadBalancer(e2e.ctx)
+				elbClient, cfg, err := getAWSClientLoadBalancer(e2e.ctx)
 				framework.ExpectNoError(err, "failed to create AWS ELB client")
 
 				// DescribeLoadBalancers API doesn't support filtering by DNS name directly
 				// Use AWS SDK paginator to search through all load balancers
-				foundLB, err := getAWSLoadBalancerFromDNSName(e2e.ctx, elbClient, hostAddr)
+				foundLB, err := getAWSLoadBalancerFromDNSName(e2e.ctx, elbClient, cfg, hostAddr)
 				framework.ExpectNoError(err, "failed to find load balancer with DNS name %s", hostAddr)
 				if foundLB == nil {
 					framework.Failf("Found load balancer is nil for DNS name %s", hostAddr)
@@ -591,13 +593,13 @@ func (e2e *e2eTestConfig) discoverClusterWorkerNode() {
 // - Verify count matches number of worker nodes
 func getLBTargetCount(ctx context.Context, lbDNSName string, expectedTargets int) error {
 	// Load AWS config
-	elbClient, err := getAWSClientLoadBalancer(ctx)
+	elbClient, cfg, err := getAWSClientLoadBalancer(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to create AWS client: %v", err)
 	}
 
 	// Get Load Balancer ARN from DNS name
-	foundLB, err := getAWSLoadBalancerFromDNSName(ctx, elbClient, lbDNSName)
+	foundLB, err := getAWSLoadBalancerFromDNSName(ctx, elbClient, cfg, lbDNSName)
 	if err != nil {
 		return fmt.Errorf("failed to get load balancer from DNS name: %v", err)
 	}
@@ -648,15 +650,101 @@ func getLBTargetCount(ctx context.Context, lbDNSName string, expectedTargets int
 }
 
 // AWS helpers
-func getAWSClientLoadBalancer(ctx context.Context) (*elbv2.Client, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load AWS config: %v", err)
+
+// dumpAWSDebugInfo provides comprehensive debugging information when AWS operations fail
+func dumpAWSDebugInfo(ctx context.Context, cfg aws.Config, lbDNSName string, originalError error) {
+	framework.Logf("=== AWS DEBUG INFO (due to error: %v) ===", originalError)
+
+	// 1. Basic Environment Info
+	framework.Logf("Environment Variables:")
+	awsEnvVars := []string{
+		"AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE", "AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE",
+		"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_ELASTIC_LOAD_BALANCING_V2", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN", "AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE",
 	}
-	return elbv2.NewFromConfig(cfg), nil
+	for _, envVar := range awsEnvVars {
+		val := os.Getenv(envVar)
+		if strings.Contains(envVar, "KEY") || strings.Contains(envVar, "SECRET") || strings.Contains(envVar, "TOKEN") {
+			if val != "" {
+				framework.Logf("  %s=<REDACTED>", envVar)
+			}
+		} else {
+			framework.Logf("  %s=%s", envVar, val)
+		}
+	}
+
+	// 2. AWS SDK Configuration
+	framework.Logf("AWS SDK Configuration:")
+	framework.Logf("  Region: %s", cfg.Region)
+	if cfg.BaseEndpoint != nil {
+		framework.Logf("  BaseEndpoint: %s", *cfg.BaseEndpoint)
+	} else {
+		framework.Logf("  BaseEndpoint: <default>")
+	}
+
+	// 3. DNS and Network Debugging
+	framework.Logf("DNS and Network Information:")
+
+	// Check DNS resolution for various endpoints
+	endpointsToTest := []string{
+		lbDNSName, // The problematic LB DNS name
+		"elasticloadbalancing." + cfg.Region + ".amazonaws.com", // Expected ELBv2 endpoint
+		"amazonaws.com", // Basic connectivity
+	}
+
+	for _, endpoint := range endpointsToTest {
+		if endpoint == "" {
+			continue
+		}
+		framework.Logf("  Testing DNS resolution for: %s", endpoint)
+		addrs, err := net.LookupHost(endpoint)
+		if err != nil {
+			framework.Logf("    ERROR: %v", err)
+		} else {
+			framework.Logf("    Resolved to: %v", addrs)
+		}
+	}
+
+	// Check nameservers
+	framework.Logf("  System DNS configuration:")
+	if resolver, err := net.LookupNS("."); err == nil {
+		framework.Logf("    Root nameservers: %v", resolver)
+	}
+
+	// 4. Network Environment Analysis
+	framework.Logf("Network Environment Analysis:")
+	framework.Logf("  Note: VPC endpoint checking requires EC2 API which is not available in this test environment")
+	framework.Logf("  The unusual endpoint format suggests possible VPC endpoint or custom networking configuration")
+
+	// 5. Check if we can reach the expected standard endpoint
+	framework.Logf("Standard ELB Endpoint Test:")
+	standardEndpoint := "elasticloadbalancing." + cfg.Region + ".amazonaws.com"
+	if conn, err := net.DialTimeout("tcp", standardEndpoint+":443", 5*time.Second); err != nil {
+		framework.Logf("  Cannot connect to standard ELB endpoint %s: %v", standardEndpoint, err)
+	} else {
+		conn.Close()
+		framework.Logf("  Successfully connected to standard ELB endpoint: %s", standardEndpoint)
+	}
+
+	framework.Logf("=== END AWS DEBUG INFO ===")
 }
 
-func getAWSLoadBalancerFromDNSName(ctx context.Context, elbClient *elbv2.Client, lbDNSName string) (*elbv2types.LoadBalancer, error) {
+func getAWSClientLoadBalancer(ctx context.Context) (*elbv2.Client, aws.Config, error) {
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, aws.Config{}, fmt.Errorf("unable to load AWS config: %v", err)
+	}
+
+	// Log basic config info for debugging
+	framework.Logf("AWS Client Configuration - Region: %s", cfg.Region)
+	if cfg.BaseEndpoint != nil {
+		framework.Logf("AWS Client Configuration - BaseEndpoint: %s", *cfg.BaseEndpoint)
+	}
+
+	return elbv2.NewFromConfig(cfg), cfg, nil
+}
+
+func getAWSLoadBalancerFromDNSName(ctx context.Context, elbClient *elbv2.Client, cfg aws.Config, lbDNSName string) (*elbv2types.LoadBalancer, error) {
 	var foundLB *elbv2types.LoadBalancer
 	framework.Logf("describing load balancers with DNS %s", lbDNSName)
 
@@ -664,6 +752,9 @@ func getAWSLoadBalancerFromDNSName(ctx context.Context, elbClient *elbv2.Client,
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
+			// This is where the DNS lookup failure occurs - dump debug info
+			framework.Logf("NextPage failed, dumping detailed debug information...")
+			dumpAWSDebugInfo(ctx, cfg, lbDNSName, err)
 			return nil, fmt.Errorf("failed to describe load balancers: %v", err)
 		}
 
