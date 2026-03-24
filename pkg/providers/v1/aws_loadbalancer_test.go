@@ -351,6 +351,7 @@ func TestBuildTargetGroupName(t *testing.T) {
 		targetProtocol elbv2types.ProtocolEnum
 		targetType     elbv2types.TargetTypeEnum
 		nlbConfig      nlbPortMapping
+		ipAddressType  elbv2types.TargetGroupIpAddressTypeEnum
 	}
 	tests := []struct {
 		name      string
@@ -368,8 +369,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-7fa2e07508",
+			want: "k8s-default-servicea-d09db77308",
 		},
 		{
 			name:      "base case & clusterID changed",
@@ -381,8 +383,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-719ee635da",
+			want: "k8s-default-servicea-b8ce450922",
 		},
 		{
 			name:      "base case & serviceNamespace changed",
@@ -394,8 +397,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-another-servicea-f66e09847d",
+			want: "k8s-another-servicea-8c06319cd6",
 		},
 		{
 			name:      "base case & serviceName changed",
@@ -407,8 +411,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-serviceb-196c19c881",
+			want: "k8s-default-serviceb-138b54c161",
 		},
 		{
 			name:      "base case & servicePort changed",
@@ -420,8 +425,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-06876706cb",
+			want: "k8s-default-servicea-3398ce2582",
 		},
 		{
 			name:      "base case & nodePort changed",
@@ -433,8 +439,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-119f844ec0",
+			want: "k8s-default-servicea-c829356629",
 		},
 		{
 			name:      "base case & targetProtocol changed",
@@ -446,8 +453,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumUdp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-3868761686",
+			want: "k8s-default-servicea-57da8753a8",
 		},
 		{
 			name:      "base case & targetType changed",
@@ -459,8 +467,9 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumIp,
 				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-0fa31f4b0f",
+			want: "k8s-default-servicea-5160ded19b",
 		},
 		{
 			name:      "custom healthcheck config",
@@ -477,8 +486,23 @@ func TestBuildTargetGroupName(t *testing.T) {
 						Interval: 10,
 					},
 				},
+				ipAddressType: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-4028e49618",
+			want: "k8s-default-servicea-c3f46cd4ed",
+		},
+		{
+			name:      "base case & ipAddressType changed to ipv6",
+			clusterID: "cluster-a",
+			args: args{
+				serviceName:    types.NamespacedName{Namespace: "default", Name: "service-a"},
+				servicePort:    80,
+				nodePort:       8080,
+				targetProtocol: elbv2types.ProtocolEnumTcp,
+				targetType:     elbv2types.TargetTypeEnumInstance,
+				nlbConfig:      nlbPortMapping{},
+				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv6,
+			},
+			want: "k8s-default-servicea-6abd575e99",
 		},
 	}
 	for _, tt := range tests {
@@ -486,7 +510,7 @@ func TestBuildTargetGroupName(t *testing.T) {
 			c := &Cloud{
 				tagging: awsTagging{ClusterID: tt.clusterID},
 			}
-			if got := c.buildTargetGroupName(tt.args.serviceName, tt.args.servicePort, tt.args.nodePort, tt.args.targetProtocol, tt.args.targetType, tt.args.nlbConfig); got != tt.want {
+			if got := c.buildTargetGroupName(tt.args.serviceName, tt.args.servicePort, tt.args.nodePort, tt.args.targetProtocol, tt.args.targetType, tt.args.nlbConfig, tt.args.ipAddressType); got != tt.want {
 				assert.Equal(t, tt.want, got)
 			}
 		})
