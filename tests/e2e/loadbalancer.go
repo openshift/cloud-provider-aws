@@ -436,8 +436,8 @@ type e2eTestConfig struct {
 
 func newE2eTestConfig(cs clientset.Interface) *e2eTestConfig {
 	// Create a context with a reasonable timeout for e2e tests
-	// E2E tests can take several minutes for load balancer provisioning and configuration
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
+	// E2E tests can take up to 45 minutes for load balancer provisioning, DNS propagation (900s SOA retry), and in-cluster connectivity tests
+	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Minute)
 	_ = cancel // We'll let the test framework handle cleanup
 
 	h, err := newAWSHelper(ctx, cs)
@@ -749,18 +749,19 @@ func (e2e *e2eTestConfig) inClusterTestReachableHTTP(target string, targetPort i
 	podName := "http-test-pod"
 
 	// Enhanced curl configuration for better resilience
-	// Total timeout calculation: 30 retries * 30s delay + 15min curl max time = ~25 minutes
-	// This aligns with the 25-minute polling timeout below
+	// Accommodates 900s DNS retry interval from SOA record
+	// Total timeout calculation: 30 retries * 30s delay + 20min curl max time = ~35 minutes
+	// This aligns with the extended polling timeout below
 	curlArgs := []string{
-		"--retry", "30", // Increase retries for new LBs
-		"--retry-delay", "30", // Longer delay for DNS propagation
-		"--retry-max-time", "900", // 15 minutes max for curl operations
-		"--retry-all-errors",      // Retry on all errors including DNS
-		"--retry-connrefused",     // Explicitly retry connection refused
-		"--connect-timeout", "30", // 30s connection timeout
-		"--max-time", "45", // 45s per individual request
-		"--trace-time", // Include timestamps for debugging
-		"--verbose",    // More detailed output for troubleshooting
+		"--retry", "30",            // Increase retries for new LBs
+		"--retry-delay", "30",      // 30s delay between retries
+		"--retry-max-time", "1200", // 20 minutes max for curl operations
+		"--retry-all-errors",       // Retry on all errors including DNS
+		"--retry-connrefused",      // Explicitly retry connection refused
+		"--connect-timeout", "30",  // 30s connection timeout
+		"--max-time", "45",         // 45s per individual request
+		"--trace-time",             // Include timestamps for debugging
+		"--verbose",                // More detailed output for troubleshooting
 		"-w", "\"\\nCURL_SUMMARY: HTTPCode=%{http_code} Time=%{time_total}s ConnectTime=%{time_connect}s DNSTime=%{time_namelookup}s\\n\"",
 		fmt.Sprintf("http://%s:%d/echo?msg=hello", target, targetPort),
 	}
@@ -832,14 +833,14 @@ func (e2e *e2eTestConfig) inClusterTestReachableHTTP(target string, targetPort i
 	}()
 
 	// Wait for the test pod to complete. Align timeout with curl retry configuration
-	// Curl timeout: 30 retries * 30s delay + 900s max = ~1800s (~25-30 minutes)
-	// Pod polling timeout: 25 minutes + buffer = ~30 minutes
+	// Curl timeout: 30 retries * 30s delay + 1200s max = ~2100s (~35 minutes)
+	// Pod polling timeout: 35 minutes + buffer = ~45 minutes
 	waitCount := 0
 	pendingCount := 0
 	consecutiveErrorCount := 0
 	maxConsecutiveErrors := 3
 	lastLoggedPhase := ""
-	podPollingTimeout := 30 * time.Minute
+	podPollingTimeout := 45 * time.Minute
 
 	framework.Logf("=== STARTING POD MONITORING ===")
 	framework.Logf("Pod polling timeout: %v (aligned with curl timeout)", podPollingTimeout)
