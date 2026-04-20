@@ -2565,37 +2565,6 @@ func (c *Cloud) cleanupNLBSecurityGroups(ctx context.Context, loadBalancerName s
 	return nil
 }
 
-// cleanupOldManagedSecurityGroups removes managed security groups that are no longer attached to the NLB
-// and removes stale ingress rules referencing old NLB security groups across the cluster-owned SGs.
-//
-// Parameters:
-//   - ctx: The context for the request.
-//   - svc: The Kubernetes service object.
-//   - existingSGs: The security groups that were attached before the update.
-//   - newSGs: The security groups currently attached to the NLB.
-//
-// Returns:
-//   - error: An error if any issue occurs while cleaning up security groups.
-func (c *Cloud) cleanupOldManagedSecurityGroups(ctx context.Context, svc *v1.Service, existingSGs *nlbSecurityGroups, newSGs *nlbSecurityGroups) error {
-	serviceName := types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}
-
-	if existingSGs == nil || existingSGs.Count() == 0 {
-		return nil
-	}
-
-	// Collect detached SGs, preserving their categorization (owned vs other)
-	detachedSGs := c.getDetachedSecurityGroups(existingSGs, newSGs)
-
-	// Remove old security groups with cross-reference cleanup
-	if err := c.cleanupNLBSecurityGroups(ctx, serviceName.String(), detachedSGs); err != nil {
-		klog.Warningf("Error cleaning up NLB security groups for service %q: %v", serviceName, err)
-		// TODO: check if we want to error here
-		// Don't return error - cleanup is best effort
-	}
-
-	return nil
-}
-
 // EnsureLoadBalancer implements LoadBalancer.EnsureLoadBalancer
 func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiService *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	annotations := apiService.Annotations

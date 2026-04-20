@@ -321,7 +321,7 @@ func TestValidateServiceAnnotations(t *testing.T) {
 			expectedError: "BYO extra security group annotation \"service.beta.kubernetes.io/aws-load-balancer-extra-security-groups\" is not supported by NLB",
 		},
 		{
-			name: "NLB with both BYO SG annotations - error (extra SG not supported)",
+			name: "NLB with both BYO SG annotations - extra SG error still applies",
 			annotations: map[string]string{
 				ServiceAnnotationLoadBalancerType:                "nlb",
 				ServiceAnnotationLoadBalancerSecurityGroups:      byoSecurityGroupID,
@@ -352,23 +352,6 @@ func TestValidateServiceAnnotations(t *testing.T) {
 				ServiceAnnotationLoadBalancerSecurityGroups: "sg-123,sg-456",
 			},
 			expectedError: "",
-		},
-		{
-			name: "NLB mixed annotations - BYO and other annotations",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerSecurityGroups: "sg-123456",
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerInternal:       "true",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB whitespace in BYO SG values - should still be rejected",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: " sg-123456 ",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
 		},
 
 		// Target group attributes validation for NLB (should succeed)

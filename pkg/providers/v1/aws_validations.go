@@ -75,6 +75,7 @@ func validateServiceAnnotations(v *awsValidationInput) error {
 	}
 
 	// ServiceAnnotationLoadBalancerExtraSecurityGroups
+	// NLB only: BYO extra security group annotation is not yet supported for NLB.
 	if _, hasExtraBYOAnnotation := v.annotations[ServiceAnnotationLoadBalancerExtraSecurityGroups]; hasExtraBYOAnnotation {
 		if isNLB {
 			return fmt.Errorf("BYO extra security group annotation %q is not supported by NLB", ServiceAnnotationLoadBalancerExtraSecurityGroups)
