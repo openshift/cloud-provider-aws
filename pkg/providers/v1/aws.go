@@ -2401,10 +2401,8 @@ func separateIPv4AndIPv6CIDRs(cidrs []string) ([]ec2types.IpRange, []ec2types.Ip
 
 // ensureNLBSecurityGroupRules ensures the NLB frontend security group rules are created and configured
 // for the specified security groups based on the load balancer port mappings (Load Balancer listeners),
-// allowing traffic from the specified source ranges.
-//
-// Only manages rules for owned (controller-managed) security groups when managed mode is enabled.
-// BYO security groups and rules when managed mode is disabled are skipped.
+// allowing traffic from the specified source ranges. Rules are attached only to the first owned
+// security group, if any.
 //
 // Parameters:
 //   - ctx: The context for the request.
@@ -2430,34 +2428,34 @@ func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, sgs *nlbSecurit
 		return nil
 	}
 
+	// Attach rules only to the first owned security group
+	securityGroupID := sgs.ownedSGs[0]
+
 	// Separate source CIDRs into IPv4 and IPv6 ranges
 	ec2SourceRanges, ec2Ipv6SourceRanges := separateIPv4AndIPv6CIDRs(sourceCIDRs)
 
-	// Manage rules only for owned security groups (other/BYO SGs are skipped)
-	for _, securityGroupID := range sgs.ownedSGs {
-		ingressRules := NewIPPermissionSet()
-		for _, mapping := range v2Mappings {
-			permission := ec2types.IpPermission{
-				FromPort:   aws.Int32(int32(mapping.FrontendPort)),
-				ToPort:     aws.Int32(int32(mapping.FrontendPort)),
-				IpProtocol: aws.String(strings.ToLower(string((mapping.FrontendProtocol)))),
-			}
-
-			// Add IPv4 ranges if present
-			if len(ec2SourceRanges) > 0 {
-				permission.IpRanges = ec2SourceRanges
-			}
-
-			// Add IPv6 ranges if present
-			if len(ec2Ipv6SourceRanges) > 0 {
-				permission.Ipv6Ranges = ec2Ipv6SourceRanges
-			}
-
-			ingressRules.Insert(permission)
+	ingressRules := NewIPPermissionSet()
+	for _, mapping := range v2Mappings {
+		permission := ec2types.IpPermission{
+			FromPort:   aws.Int32(int32(mapping.FrontendPort)),
+			ToPort:     aws.Int32(int32(mapping.FrontendPort)),
+			IpProtocol: aws.String(strings.ToLower(string((mapping.FrontendProtocol)))),
 		}
-		if err := c.createSecurityGroupRules(ctx, securityGroupID, ingressRules, ec2SourceRanges, ec2Ipv6SourceRanges); err != nil {
-			return fmt.Errorf("error while updating rules to security group %q: %w", securityGroupID, err)
+
+		// Add IPv4 ranges if present
+		if len(ec2SourceRanges) > 0 {
+			permission.IpRanges = ec2SourceRanges
 		}
+
+		// Add IPv6 ranges if present
+		if len(ec2Ipv6SourceRanges) > 0 {
+			permission.Ipv6Ranges = ec2Ipv6SourceRanges
+		}
+
+		ingressRules.Insert(permission)
+	}
+	if err := c.createSecurityGroupRules(ctx, securityGroupID, ingressRules, ec2SourceRanges, ec2Ipv6SourceRanges); err != nil {
+		return fmt.Errorf("error while updating rules to security group %q: %w", securityGroupID, err)
 	}
 
 	return nil
@@ -2578,23 +2576,8 @@ func (c *Cloud) cleanupOldManagedSecurityGroups(ctx context.Context, svc *v1.Ser
 		return nil
 	}
 
-	newSGSet := make(map[string]bool)
-	for _, sg := range newSGs.All() {
-		newSGSet[sg] = true
-	}
-
 	// Collect detached SGs, preserving their categorization (owned vs other)
-	detachedSGs := &nlbSecurityGroups{}
-	for _, sg := range existingSGs.ownedSGs {
-		if !newSGSet[sg] {
-			detachedSGs.ownedSGs = append(detachedSGs.ownedSGs, sg)
-		}
-	}
-	for _, sg := range existingSGs.otherSGs {
-		if !newSGSet[sg] {
-			detachedSGs.otherSGs = append(detachedSGs.otherSGs, sg)
-		}
-	}
+	detachedSGs := c.getDetachedSecurityGroups(existingSGs, newSGs)
 
 	// Remove old security groups with cross-reference cleanup
 	if err := c.cleanupNLBSecurityGroups(ctx, serviceName.String(), detachedSGs); err != nil {
@@ -2785,9 +2768,9 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			return nil, fmt.Errorf("error ensuring NLB security group rules: %w", err)
 		}
 
-		// Cleanup old managed security groups and stale rules
-		if existingSGs != nil && existingSGs.Count() > 0 {
-			if err := c.cleanupOldManagedSecurityGroups(ctx, apiService, existingSGs, newSGs); err != nil {
+		// Cleanup old managed security groups and rules referencing them, if any
+		if detachedSGs := c.getDetachedSecurityGroups(existingSGs, newSGs); detachedSGs.Count() > 0 {
+			if err := c.cleanupNLBSecurityGroups(ctx, loadBalancerName, detachedSGs); err != nil {
 				klog.Warningf("Error cleaning up old managed security groups: %v", err)
 				// Don't fail the whole operation if cleanup fails
 			}
