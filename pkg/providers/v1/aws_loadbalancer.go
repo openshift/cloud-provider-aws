@@ -296,7 +296,7 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 					SecurityGroups:  securityGroups,
 				})
 				if err != nil {
-					return nil, fmt.Errorf("error setting security groups on load balancer: %q", err)
+					return nil, fmt.Errorf("error setting security groups on load balancer: %w", err)
 				}
 				dirty = true
 			}
