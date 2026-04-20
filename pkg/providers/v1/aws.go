@@ -2238,6 +2238,37 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 	return hc, nil
 }
 
+// nlbSecurityGroupInfo contains information about the security groups for an NLB,
+// including whether they are BYO (Bring Your Own) or managed by the controller.
+type nlbSecurityGroupInfo struct {
+	// SecurityGroups is the list of security group IDs to be associated with the NLB.
+	SecurityGroups []string
+	// IsBYO indicates whether these security groups are user-provided (BYO)
+	// or managed by the controller.
+	IsBYO bool
+}
+
+// getOldNLBSecurityGroups retrieves the security groups currently attached to an existing NLB.
+// Returns an empty slice if the load balancer doesn't exist.
+//
+// Parameters:
+//   - ctx: The context for the request.
+//   - loadBalancerName: The name of the load balancer to query.
+//
+// Returns:
+//   - []string: The security group IDs attached to the load balancer, or empty if LB doesn't exist.
+//   - error: An error if the load balancer query fails (not including "not found" errors).
+func (c *Cloud) getOldNLBSecurityGroups(ctx context.Context, loadBalancerName string) ([]string, error) {
+	existingLB, err := c.describeLoadBalancerv2(ctx, loadBalancerName)
+	if err != nil {
+		return nil, fmt.Errorf("error describing existing load balancer: %w", err)
+	}
+	if existingLB != nil {
+		return existingLB.SecurityGroups, nil
+	}
+	return []string{}, nil
+}
+
 // ensureNLBSecurityGroup ensures the NLB security group is created and configured
 // based on the current NLB state and configuration mode, ensuring limitations
 // are clearly reported to users.
@@ -2249,33 +2280,108 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 //   - svc: The service to generate the security group name for.
 //
 // Returns:
-//   - []string: A list of security group IDs to be associated with the NLB.
+//   - *nlbSecurityGroupInfo: Information about the security groups including IDs and whether they are BYO.
 //   - error: An error if any issue occurs while ensuring the NLB security group.
-func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, loadBalancerName, clusterName string, svc *v1.Service) ([]string, error) {
+func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, loadBalancerName, clusterName string, svc *v1.Service) (*nlbSecurityGroupInfo, error) {
 	annotations := svc.Annotations
+	serviceName := types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}
+
+	// Check if BYO security group annotation is present
+	byoSGList := getSGListFromAnnotation(annotations[ServiceAnnotationLoadBalancerSecurityGroups])
+	if len(byoSGList) > 0 {
+		// BYO security groups are only supported in managed mode
+		isManaged, err := c.cfg.IsNLBSecurityGroupModeManaged()
+		if err != nil {
+			return nil, fmt.Errorf("error checking NLB security group mode: %w", err)
+		}
+		if !isManaged {
+			// not managed mode, return no groups
+			return &nlbSecurityGroupInfo{
+				SecurityGroups: []string{},
+				IsBYO:          false,
+			}, nil
+		}
+		klog.Infof("Using BYO security groups %v for NLB service %q", byoSGList, serviceName)
+		return &nlbSecurityGroupInfo{
+			SecurityGroups: byoSGList,
+			IsBYO:          true,
+		}, nil
+	}
+
+	// No BYO annotation - use managed security groups
 	loadBalancer, err := c.describeLoadBalancerv2(ctx, loadBalancerName)
 	if err != nil {
 		return nil, fmt.Errorf("error describing load balancer %s: %w", loadBalancerName, err)
 	}
 
 	if loadBalancer != nil {
-		// Existing NLB with security groups.
-		if len(loadBalancer.SecurityGroups) > 0 {
-			return loadBalancer.SecurityGroups, nil
+		// Existing NLB - return only managed (owned) security groups
+		// Filter out any BYO security groups that may have been previously attached
+		ownedSGs := []string{}
+		for _, sg := range loadBalancer.SecurityGroups {
+			isOwned, err := c.isOwnedSecurityGroup(ctx, sg)
+			if err != nil {
+				klog.Warningf("Error checking if security group %q is owned for service %q: %v", sg, serviceName, err)
+				return nil, err
+			}
+			if isOwned {
+				ownedSGs = append(ownedSGs, sg)
+			}
 		}
-		return []string{}, nil
+
+		// If we have managed SGs, return them
+		if len(ownedSGs) > 0 {
+			return &nlbSecurityGroupInfo{
+				SecurityGroups: ownedSGs,
+				IsBYO:          false,
+			}, nil
+		}
+
+		// If no SGs, then do not attach one (no retrofit)
+		if len(loadBalancer.SecurityGroups) == 0 {
+			return &nlbSecurityGroupInfo{
+				SecurityGroups: []string{},
+				IsBYO:          false,
+			}, nil
+		}
+
+		// No managed (owned) SGs found, but LB has SGs (BYO)
+		// AWS NLB requirement: once it has SGs, it must always have at least one
+
+		// Check if managed mode is enabled to create a replacement managed SG
+		isManaged, err := c.cfg.IsNLBSecurityGroupModeManaged()
+		if err != nil {
+			return nil, fmt.Errorf("error checking NLB security group mode: %w", err)
+		}
+		if !isManaged {
+			// Not in managed mode, return empty (no action)
+			return &nlbSecurityGroupInfo{
+				SecurityGroups: []string{},
+				IsBYO:          false,
+			}, nil
+		}
+
+		// if here, SG has only BYO Groups
+		// but no annotation
+		// and we are in managed mode
+		// we need to fall through to create a new managed group
 	}
 
-	// Do nothing when controller is not in NLB SG managed mode, NLBSecurityGroupMode=Managed.
+	// Create new managed security group (for new LBs or replacing BYO)
+
+	// New LB - check if managed mode is enabled
 	isManaged, err := c.cfg.IsNLBSecurityGroupModeManaged()
 	if err != nil {
 		return nil, fmt.Errorf("error checking NLB security group mode: %w", err)
 	}
 	if !isManaged {
-		return []string{}, nil
+		return &nlbSecurityGroupInfo{
+			SecurityGroups: []string{},
+			IsBYO:          false,
+		}, nil
 	}
 
-	serviceName := types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}
+	// Else create new managed security group
 	sgName := c.GetSecurityGroupNameForNLB(clusterName, svc)
 	klog.Infof("Creating NLB security group %q for service %q", sgName, serviceName)
 	securityGroupID, err := c.createSecurityGroup(ctx, sgName,
@@ -2287,7 +2393,10 @@ func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, loadBalancerName, cl
 	}
 	klog.Infof("Created NLB security group %q for service %q", securityGroupID, serviceName)
 
-	return []string{securityGroupID}, nil
+	return &nlbSecurityGroupInfo{
+		SecurityGroups: []string{securityGroupID},
+		IsBYO:          false,
+	}, nil
 }
 
 // separateIPv4AndIPv6CIDRs separates a list of CIDR strings into IPv4 and IPv6 ranges
@@ -2320,19 +2429,31 @@ func separateIPv4AndIPv6CIDRs(cidrs []string) ([]ec2types.IpRange, []ec2types.Ip
 // for the specified security groups based on the load balancer port mappings (Load Balancer listeners),
 // allowing traffic from the specified source ranges.
 //
+// BYO (Bring Your Own) security groups are not managed by this function and are left untouched.
+//
 // Parameters:
 //   - ctx: The context for the request.
-//   - securityGroups: The security group IDs to configure rules for (only first SG is used).
+//   - svc: The Kubernetes service object (used for logging).
+//   - sgInfo: The security group information including IDs and whether they are BYO.
 //   - sourceCIDRs: The CIDR ranges (IPv4 and/or IPv6) allowed to access the load balancer.
 //   - v2Mappings: The NLB port mappings defining frontend ports and protocols.
 //
 // Returns:
 //   - error: An error if any issue occurs while ensuring the NLB security group rules.
-func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, securityGroups []string, sourceCIDRs []string, v2Mappings []nlbPortMapping) error {
-	if len(securityGroups) == 0 {
+func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, svc *v1.Service, sgInfo *nlbSecurityGroupInfo, sourceCIDRs []string, v2Mappings []nlbPortMapping) error {
+	if sgInfo == nil || len(sgInfo.SecurityGroups) == 0 {
 		return nil
 	}
-	securityGroupID := securityGroups[0]
+
+	// Skip rule management for BYO security groups
+	if sgInfo.IsBYO {
+		serviceName := types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}
+		klog.V(2).Infof("Skipping rule management for BYO security group %q on service %q", sgInfo.SecurityGroups[0], serviceName)
+		return nil
+	}
+
+	// TODO: Do we want to only attach rules to the first managed group?
+	securityGroupID := sgInfo.SecurityGroups[0]
 
 	// Separate source CIDRs into IPv4 and IPv6 ranges
 	ec2SourceRanges, ec2Ipv6SourceRanges := separateIPv4AndIPv6CIDRs(sourceCIDRs)
@@ -2360,6 +2481,61 @@ func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, securityGroups 
 	if err := c.createSecurityGroupRules(ctx, securityGroupID, ingressRules, ec2SourceRanges, ec2Ipv6SourceRanges); err != nil {
 		return fmt.Errorf("error while updating rules to security group %q: %w", securityGroupID, err)
 	}
+	return nil
+}
+
+// cleanupOldManagedSecurityGroups removes managed security groups that are no longer attached to the NLB.
+// This handles the transition from managed SGs to BYO SGs by cleaning up the old managed SGs.
+//
+// Parameters:
+//   - ctx: The context for the request.
+//   - svc: The Kubernetes service object.
+//   - oldSecurityGroups: The security groups that were attached before the update.
+//   - newSGInfo: The security group information for the currently attached security groups.
+//
+// Returns:
+//   - error: An error if any issue occurs while cleaning up security groups.
+func (c *Cloud) cleanupOldManagedSecurityGroups(ctx context.Context, svc *v1.Service, oldSecurityGroups []string, newSGInfo *nlbSecurityGroupInfo) error {
+	serviceName := types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}
+
+	// Build a set of new SGs for quick lookup
+	newSGSet := make(map[string]bool)
+	if newSGInfo != nil {
+		for _, sg := range newSGInfo.SecurityGroups {
+			newSGSet[sg] = true
+		}
+	}
+
+	// Collect old managed SGs that need to be deleted
+	sgsToDelete := make(map[string]struct{})
+	for _, oldSG := range oldSecurityGroups {
+		// Skip if this SG is still attached
+		if newSGSet[oldSG] {
+			continue
+		}
+
+		// Skip if not owned sg (i.e. byo SG)
+		isOwned, err := c.isOwnedSecurityGroup(ctx, oldSG)
+		if err != nil {
+			klog.Warningf("Error checking if security group %q is owned for service %q: %v", oldSG, serviceName, err)
+			continue
+		}
+
+		if isOwned {
+			klog.Infof("Scheduling deletion of old managed security group %q for service %q after transition to BYO", oldSG, serviceName)
+			sgsToDelete[oldSG] = struct{}{}
+		}
+	}
+
+	// Delete the old managed security groups with backoff
+	if len(sgsToDelete) > 0 {
+		if err := c.deleteSecurityGroupsWithBackoff(ctx, serviceName.String(), sgsToDelete); err != nil {
+			klog.Warningf("Error deleting old managed security groups for service %q: %v", serviceName, err)
+			// TODO: check if we want to error here
+			// Don't return error - cleanup is best effort
+		}
+	}
+
 	return nil
 }
 
@@ -2500,6 +2676,12 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			instanceIDs = append(instanceIDs, string(id))
 		}
 
+		// Get old security groups for cleanup if transitioning from managed to BYO
+		oldSecurityGroups, err := c.getOldNLBSecurityGroups(ctx, loadBalancerName)
+		if err != nil {
+			return nil, err
+		}
+
 		securityGroups, err := c.ensureNLBSecurityGroup(ctx,
 			loadBalancerName,
 			clusterName,
@@ -2516,7 +2698,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			discoveredSubnetIDs,
 			internalELB,
 			annotations,
-			securityGroups,
+			securityGroups.SecurityGroups,
 			apiService,
 		)
 		if err != nil {
@@ -2524,8 +2706,16 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 
 		// Ensure SG rules only if the LB reconciliator finished successfully.
-		if err := c.ensureNLBSecurityGroupRules(ctx, securityGroups, sourceCIDRs, v2Mappings); err != nil {
+		if err := c.ensureNLBSecurityGroupRules(ctx, apiService, securityGroups, sourceCIDRs, v2Mappings); err != nil {
 			return nil, fmt.Errorf("error ensuring NLB security group rules: %w", err)
+		}
+
+		// Cleanup old managed security groups if we transitioned from managed to BYO
+		if len(oldSecurityGroups) > 0 && len(securityGroups.SecurityGroups) > 0 {
+			if err := c.cleanupOldManagedSecurityGroups(ctx, apiService, oldSecurityGroups, securityGroups); err != nil {
+				klog.Warningf("Error cleaning up old managed security groups: %v", err)
+				// Don't fail the whole operation if cleanup fails
+			}
 		}
 
 		// try to get the ensured subnets of the LBs from AZs
@@ -3013,19 +3203,9 @@ func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(ctx context.Context,
 	loadBalancerSecurityGroupID := lbSecurityGroupIDs[0]
 
 	// Get the actual list of groups that allow ingress from the load-balancer
-	actualGroups := make(map[*ec2types.SecurityGroup]bool)
-	{
-		describeRequest := &ec2.DescribeSecurityGroupsInput{}
-		describeRequest.Filters = []ec2types.Filter{
-			newEc2Filter("ip-permission.group-id", loadBalancerSecurityGroupID),
-		}
-		response, err := c.ec2.DescribeSecurityGroups(ctx, describeRequest)
-		if err != nil {
-			return fmt.Errorf("error querying security groups for ELB: %q", err)
-		}
-		for _, sg := range response {
-			actualGroups[&sg] = c.tagging.hasClusterTag(sg.Tags)
-		}
+	actualGroups, _, err := c.buildSecurityGroupRuleReferences(ctx, loadBalancerSecurityGroupID)
+	if err != nil {
+		return fmt.Errorf("error building security group rule references: %w", err)
 	}
 
 	// Open the firewall from the load balancer to the instance
@@ -3167,7 +3347,7 @@ func (c *Cloud) deleteSecurityGroupsWithBackoff(ctx context.Context, svcName str
 			return true, nil
 		}
 
-		klog.V(2).Infof("Waiting for load-balancer %q to delete so we can delete security groups: %v", svcName, securityGroupIDs)
+		klog.V(2).Infof("Waiting for load-balancer %q to delete/detach from SG so we can delete security groups: %v", svcName, securityGroupIDs)
 		return false, nil
 	})
 	if err != nil {
