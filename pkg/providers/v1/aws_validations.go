@@ -74,15 +74,6 @@ func validateServiceAnnotations(v *awsValidationInput) error {
 		}
 	}
 
-	// ServiceAnnotationLoadBalancerSecurityGroups
-	// NLB only: ensure the BYO annotations are not supported and return an error.
-	// FIXME: the BYO SG for NLB implementation is blocked by https://github.com/kubernetes/cloud-provider-aws/pull/1209
-	if _, hasBYOAnnotation := v.annotations[ServiceAnnotationLoadBalancerSecurityGroups]; hasBYOAnnotation {
-		if isNLB {
-			return fmt.Errorf("BYO security group annotation %q is not supported by NLB", ServiceAnnotationLoadBalancerSecurityGroups)
-		}
-	}
-
 	// ServiceAnnotationLoadBalancerExtraSecurityGroups
 	if _, hasExtraBYOAnnotation := v.annotations[ServiceAnnotationLoadBalancerExtraSecurityGroups]; hasExtraBYOAnnotation {
 		if isNLB {
