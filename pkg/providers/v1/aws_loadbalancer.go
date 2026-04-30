@@ -22,10 +22,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/netip"
 	"reflect"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -96,40 +94,6 @@ func isLBExternal(annotations map[string]string) bool {
 	return false
 }
 
-// getTargetGroupIPAddressTypeFromService determines the IP address type for the target group
-// based on the Service's spec.ipFamilies field. According to Kubernetes dual-stack documentation:
-// The target group will match the family of the first entry in spec.ipFamilies, which is defaulted by
-// the Kube API server.
-func getTargetGroupIPAddressTypeFromService(service *v1.Service) elbv2types.TargetGroupIpAddressTypeEnum {
-	if service != nil && len(service.Spec.IPFamilies) > 0 {
-		if service.Spec.IPFamilies[0] == v1.IPv6Protocol {
-			return elbv2types.TargetGroupIpAddressTypeEnumIpv6
-		}
-	}
-	// Default to IPv4
-	return elbv2types.TargetGroupIpAddressTypeEnumIpv4
-}
-
-// getLoadBalancerIPAddressTypeFromService determines the IP address type of the load balancer.
-// This will either be IPv4 (the default), or dual stack.
-// If nil is passed, IPv4 will be returned.
-func getLoadBalancerIPAddressTypeFromService(service *v1.Service) elbv2types.IpAddressType {
-	if serviceRequestsIPv6(service) {
-		return elbv2types.IpAddressTypeDualstack
-	}
-	// Default to single stack, IPv4
-	return elbv2types.IpAddressTypeIpv4
-}
-
-// serviceRequestsIPv6 checks if the Service has IPv6 configured in its ipFamilies
-func serviceRequestsIPv6(service *v1.Service) bool {
-	if service == nil || len(service.Spec.IPFamilies) == 0 {
-		return false
-	}
-
-	return slices.Contains(service.Spec.IPFamilies, v1.IPv6Protocol)
-}
-
 type healthCheckConfig struct {
 	Port               string
 	Path               string
@@ -181,7 +145,7 @@ func getKeyValuePropertiesFromAnnotation(annotations map[string]string, annotati
 }
 
 // ensureLoadBalancerv2 ensures a v2 load balancer is created
-func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.NamespacedName, loadBalancerName string, mappings []nlbPortMapping, instanceIDs, discoveredSubnetIDs []string, internalELB bool, annotations map[string]string, securityGroups []string, service *v1.Service) (*elbv2types.LoadBalancer, error) {
+func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.NamespacedName, loadBalancerName string, mappings []nlbPortMapping, instanceIDs, discoveredSubnetIDs []string, internalELB bool, annotations map[string]string, securityGroups []string) (*elbv2types.LoadBalancer, error) {
 	loadBalancer, err := c.describeLoadBalancerv2(ctx, loadBalancerName)
 	if err != nil {
 		return nil, err
@@ -195,22 +159,11 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 	tags[TagNameKubernetesService] = namespacedName.String()
 	tags = c.tagging.buildTags(ResourceLifecycleOwned, tags)
 
-	// Determine target group IP address type based on Service spec.ipFamilies
-	targetGroupIPAddressType := getTargetGroupIPAddressTypeFromService(service)
-
-	ipv6Requested := serviceRequestsIPv6(service)
-
-	// Validate that single stack IPv6 is not being used (not supported on NLB)
-	if err := validateIPFamilyInfo(service, ipv6Requested); err != nil {
-		return nil, err
-	}
-
 	if loadBalancer == nil {
 		// Create the LB
 		createRequest := &elbv2.CreateLoadBalancerInput{
-			Type:          elbv2types.LoadBalancerTypeEnumNetwork,
-			Name:          aws.String(loadBalancerName),
-			IpAddressType: getLoadBalancerIPAddressTypeFromService(service),
+			Type: elbv2types.LoadBalancerTypeEnumNetwork,
+			Name: aws.String(loadBalancerName),
 		}
 		if internalELB {
 			createRequest.Scheme = elbv2types.LoadBalancerSchemeEnumInternal
@@ -255,7 +208,7 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 		for i := range mappings {
 			// It is easier to keep track of updates by having possibly
 			// duplicate target groups where the backend port is the same
-			_, err := c.createListenerV2(ctx, createResponse.LoadBalancers[0].LoadBalancerArn, mappings[i], namespacedName, instanceIDs, *createResponse.LoadBalancers[0].VpcId, tags, targetGroupIPAddressType)
+			_, err := c.createListenerV2(ctx, createResponse.LoadBalancers[0].LoadBalancerArn, mappings[i], namespacedName, instanceIDs, *createResponse.LoadBalancers[0].VpcId, tags)
 			if err != nil {
 				return nil, fmt.Errorf("error creating listener: %q", err)
 			}
@@ -265,21 +218,6 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 		}
 	} else {
 		// TODO: Sync internal vs non-internal
-
-		// Reconcile LB IpAddressType: if the Service's desired address family
-		// differs from what the existing NLB has, update it via SetIpAddressType.
-		desiredIPAddressType := getLoadBalancerIPAddressTypeFromService(service)
-		if loadBalancer.IpAddressType != desiredIPAddressType {
-			klog.Infof("Updating load balancer %s IpAddressType from %s to %s for %v",
-				loadBalancerName, loadBalancer.IpAddressType, desiredIPAddressType, namespacedName)
-			if _, err := c.elbv2.SetIpAddressType(ctx, &elbv2.SetIpAddressTypeInput{
-				LoadBalancerArn: loadBalancer.LoadBalancerArn,
-				IpAddressType:   desiredIPAddressType,
-			}); err != nil {
-				return nil, fmt.Errorf("error updating load balancer IpAddressType: %q", err)
-			}
-			dirty = true
-		}
 
 		// sync mappings
 		{
@@ -348,9 +286,8 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 						}
 					}
 
-					// recreate targetGroup if trafficPort, protocol, HealthCheckProtocol, or IpAddressType changed
+					// recreate targetGroup if trafficPort, protocol or HealthCheckProtocol changed
 					healthCheckModified := false
-					ipAddressTypeChanged := false
 					targetGroupRecreated := false
 					targetGroup, ok := nodePortTargetGroup[nodePort]
 
@@ -359,14 +296,7 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 						healthCheckModified = true
 					}
 
-					// Check if IP address type has changed (requires target group recreation)
-					if targetGroup != nil && targetGroup.IpAddressType != targetGroupIPAddressType {
-						klog.Infof("Target group IP address type changed from %s to %s for %v, will recreate target group",
-							targetGroup.IpAddressType, targetGroupIPAddressType, namespacedName)
-						ipAddressTypeChanged = true
-					}
-
-					if !ok || targetGroup.Protocol != mapping.TrafficProtocol || healthCheckModified || ipAddressTypeChanged {
+					if !ok || targetGroup.Protocol != mapping.TrafficProtocol || healthCheckModified {
 						// create new target group
 						targetGroup, err = c.ensureTargetGroup(ctx,
 							nil,
@@ -375,7 +305,6 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 							instanceIDs,
 							*loadBalancer.VpcId,
 							tags,
-							targetGroupIPAddressType,
 						)
 						if err != nil {
 							return nil, err
@@ -425,7 +354,6 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 							instanceIDs,
 							*loadBalancer.VpcId,
 							tags,
-							targetGroupIPAddressType,
 						)
 						if err != nil {
 							return nil, err
@@ -436,7 +364,7 @@ func (c *Cloud) ensureLoadBalancerv2(ctx context.Context, namespacedName types.N
 				}
 
 				// Additions
-				_, err := c.createListenerV2(ctx, loadBalancer.LoadBalancerArn, mapping, namespacedName, instanceIDs, *loadBalancer.VpcId, tags, targetGroupIPAddressType)
+				_, err := c.createListenerV2(ctx, loadBalancer.LoadBalancerArn, mapping, namespacedName, instanceIDs, *loadBalancer.VpcId, tags)
 				if err != nil {
 					return nil, err
 				}
@@ -738,8 +666,8 @@ var invalidELBV2NameRegex = regexp.MustCompile("[^[:alnum:]]")
 
 // buildTargetGroupName will build unique name for targetGroup of service & port.
 // the name is in format k8s-{namespace:8}-{name:8}-{uuid:10} (chosen to benefit most common use cases).
-// Note: nodePort & targetProtocol & targetType & ipAddressType are included since they cannot be modified on existing targetGroup.
-func (c *Cloud) buildTargetGroupName(serviceName types.NamespacedName, servicePort int32, nodePort int32, targetProtocol elbv2types.ProtocolEnum, targetType elbv2types.TargetTypeEnum, mapping nlbPortMapping, ipAddressType elbv2types.TargetGroupIpAddressTypeEnum) string {
+// Note: nodePort & targetProtocol & targetType are included since they cannot be modified on existing targetGroup.
+func (c *Cloud) buildTargetGroupName(serviceName types.NamespacedName, servicePort int32, nodePort int32, targetProtocol elbv2types.ProtocolEnum, targetType elbv2types.TargetTypeEnum, mapping nlbPortMapping) string {
 	hasher := sha1.New()
 	_, _ = hasher.Write([]byte(c.tagging.clusterID()))
 	_, _ = hasher.Write([]byte(serviceName.Namespace))
@@ -750,7 +678,6 @@ func (c *Cloud) buildTargetGroupName(serviceName types.NamespacedName, servicePo
 	_, _ = hasher.Write([]byte(targetType))
 	_, _ = hasher.Write([]byte(mapping.HealthCheckConfig.Protocol))
 	_, _ = hasher.Write([]byte(strconv.FormatInt(int64(mapping.HealthCheckConfig.Interval), 10)))
-	_, _ = hasher.Write([]byte(ipAddressType))
 	tgUUID := hex.EncodeToString(hasher.Sum(nil))
 
 	sanitizedNamespace := invalidELBV2NameRegex.ReplaceAllString(serviceName.Namespace, "")
@@ -758,7 +685,7 @@ func (c *Cloud) buildTargetGroupName(serviceName types.NamespacedName, servicePo
 	return fmt.Sprintf("k8s-%.8s-%.8s-%.10s", sanitizedNamespace, sanitizedServiceName, tgUUID)
 }
 
-func (c *Cloud) createListenerV2(ctx context.Context, loadBalancerArn *string, mapping nlbPortMapping, namespacedName types.NamespacedName, instanceIDs []string, vpcID string, tags map[string]string, ipAddressType elbv2types.TargetGroupIpAddressTypeEnum) (listener *elbv2types.Listener, err error) {
+func (c *Cloud) createListenerV2(ctx context.Context, loadBalancerArn *string, mapping nlbPortMapping, namespacedName types.NamespacedName, instanceIDs []string, vpcID string, tags map[string]string) (listener *elbv2types.Listener, err error) {
 	target, err := c.ensureTargetGroup(ctx,
 		nil,
 		namespacedName,
@@ -766,7 +693,6 @@ func (c *Cloud) createListenerV2(ctx context.Context, loadBalancerArn *string, m
 		instanceIDs,
 		vpcID,
 		tags,
-		ipAddressType,
 	)
 	if err != nil {
 		return nil, err
@@ -823,20 +749,19 @@ func (c *Cloud) deleteListenerV2(ctx context.Context, listener *elbv2types.Liste
 }
 
 // ensureTargetGroup creates a target group with a set of instances.
-func (c *Cloud) ensureTargetGroup(ctx context.Context, targetGroup *elbv2types.TargetGroup, serviceName types.NamespacedName, mapping nlbPortMapping, instances []string, vpcID string, tags map[string]string, ipAddressType elbv2types.TargetGroupIpAddressTypeEnum) (*elbv2types.TargetGroup, error) {
+func (c *Cloud) ensureTargetGroup(ctx context.Context, targetGroup *elbv2types.TargetGroup, serviceName types.NamespacedName, mapping nlbPortMapping, instances []string, vpcID string, tags map[string]string) (*elbv2types.TargetGroup, error) {
 	dirty := false
 	expectedTargets := c.computeTargetGroupExpectedTargets(instances, mapping.TrafficPort)
 	if targetGroup == nil {
 		targetType := elbv2types.TargetTypeEnumInstance
-		name := c.buildTargetGroupName(serviceName, mapping.FrontendPort, mapping.TrafficPort, mapping.TrafficProtocol, targetType, mapping, ipAddressType)
-		klog.Infof("Creating load balancer target group for %v with name: %s (IP address type: %s)", serviceName, name, ipAddressType)
+		name := c.buildTargetGroupName(serviceName, mapping.FrontendPort, mapping.TrafficPort, mapping.TrafficProtocol, targetType, mapping)
+		klog.Infof("Creating load balancer target group for %v with name: %s", serviceName, name)
 		input := &elbv2.CreateTargetGroupInput{
 			VpcId:                      aws.String(vpcID),
 			Name:                       aws.String(name),
 			Port:                       aws.Int32(mapping.TrafficPort),
 			Protocol:                   mapping.TrafficProtocol,
 			TargetType:                 targetType,
-			IpAddressType:              ipAddressType,
 			HealthCheckIntervalSeconds: aws.Int32(mapping.HealthCheckConfig.Interval),
 			HealthCheckPort:            aws.String(mapping.HealthCheckConfig.Port),
 			HealthCheckProtocol:        mapping.HealthCheckConfig.Protocol,
@@ -934,18 +859,7 @@ func (c *Cloud) ensureTargetGroup(ctx context.Context, targetGroup *elbv2types.T
 
 func (c *Cloud) ensureTargetGroupTargets(ctx context.Context, tgARN string, expectedTargets []*elbv2types.TargetDescription, actualTargets []*elbv2types.TargetDescription) error {
 	targetsToRegister, targetsToDeregister := c.diffTargetGroupTargets(expectedTargets, actualTargets)
-	if len(targetsToRegister) > 0 {
-		targetsToRegisterChunks := c.chunkTargetDescriptions(targetsToRegister, defaultRegisterTargetsChunkSize)
-		for _, targetsChunk := range targetsToRegisterChunks {
-			req := &elbv2.RegisterTargetsInput{
-				TargetGroupArn: aws.String(tgARN),
-				Targets:        targetsChunk,
-			}
-			if _, err := c.elbv2.RegisterTargets(ctx, req); err != nil {
-				return fmt.Errorf("error trying to register targets in target group: %q", err)
-			}
-		}
-	}
+	// deregister targets prior to registering to allow instance replacements when the LB is at max instance capacity
 	if len(targetsToDeregister) > 0 {
 		targetsToDeregisterChunks := c.chunkTargetDescriptions(targetsToDeregister, defaultDeregisterTargetsChunkSize)
 		for _, targetsChunk := range targetsToDeregisterChunks {
@@ -955,6 +869,18 @@ func (c *Cloud) ensureTargetGroupTargets(ctx context.Context, tgARN string, expe
 			}
 			if _, err := c.elbv2.DeregisterTargets(ctx, req); err != nil {
 				return fmt.Errorf("error trying to deregister targets in target group: %q", err)
+			}
+		}
+	}
+	if len(targetsToRegister) > 0 {
+		targetsToRegisterChunks := c.chunkTargetDescriptions(targetsToRegister, defaultRegisterTargetsChunkSize)
+		for _, targetsChunk := range targetsToRegisterChunks {
+			req := &elbv2.RegisterTargetsInput{
+				TargetGroupArn: aws.String(tgARN),
+				Targets:        targetsChunk,
+			}
+			if _, err := c.elbv2.RegisterTargets(ctx, req); err != nil {
+				return fmt.Errorf("error trying to register targets in target group: %q", err)
 			}
 		}
 	}
@@ -1093,18 +1019,7 @@ func (c *Cloud) updateInstanceSecurityGroupsForNLB(ctx context.Context, lbName s
 			if desiredSGIDs.Has(sgID) {
 				// If the client rule is 1) all addresses 2) tcp and 3) has same ports as the healthcheck,
 				// then the health rules are a subset of the client rule and are not needed.
-				// "All addresses" means 0.0.0.0/0 for IPv4-only, or both 0.0.0.0/0 and ::/0 for dual-stack.
-				var ipv4ClientCIDRs, ipv6ClientCIDRs []string
-				for _, cidr := range clientCIDRs {
-					if isIPv6CIDR(cidr) {
-						ipv6ClientCIDRs = append(ipv6ClientCIDRs, cidr)
-					} else {
-						ipv4ClientCIDRs = append(ipv4ClientCIDRs, cidr)
-					}
-				}
-				clientCIDRsAllOpen := len(ipv4ClientCIDRs) == 1 && ipv4ClientCIDRs[0] == "0.0.0.0/0" &&
-					(len(ipv6ClientCIDRs) == 0 || (len(ipv6ClientCIDRs) == 1 && ipv6ClientCIDRs[0] == "::/0"))
-				if !clientCIDRsAllOpen || clientProtocol != "tcp" || !healthCheckPorts.Equal(clientPorts) {
+				if len(clientCIDRs) != 1 || clientCIDRs[0] != "0.0.0.0/0" || clientProtocol != "tcp" || !healthCheckPorts.Equal(clientPorts) {
 					if err := c.updateInstanceSecurityGroupForNLBTraffic(ctx, sgID, sgPerms, healthRuleAnnotation, "tcp", healthCheckPorts, subnetCIDRs); err != nil {
 						return err
 					}
@@ -1130,49 +1045,23 @@ func (c *Cloud) updateInstanceSecurityGroupsForNLB(ctx context.Context, lbName s
 	return nil
 }
 
-// isIPv6CIDR returns true if the given CIDR is an IPv6 CIDR.
-// It uses netip.ParsePrefix to properly parse and validate the CIDR notation.
-func isIPv6CIDR(cidr string) bool {
-	prefix, err := netip.ParsePrefix(cidr)
-	if err != nil {
-		// If parsing fails, fall back to simple string check for backward compatibility
-		// This shouldn't happen with valid AWS CIDR blocks, but we handle it gracefully
-		klog.Warningf("Failed to parse CIDR %s: %v, falling back to string-based detection", cidr, err)
-		return strings.Contains(cidr, ":")
-	}
-	return prefix.Addr().Is6()
-}
-
 // updateInstanceSecurityGroupForNLBTraffic will manage permissions set(identified by ruleDesc) on securityGroup to match desired set(allow protocol traffic from ports/cidr).
 // Note: sgPerms will be updated to reflect the current permission set on SG after update.
 func (c *Cloud) updateInstanceSecurityGroupForNLBTraffic(ctx context.Context, sgID string, sgPerms IPPermissionSet, ruleDesc string, protocol string, ports sets.Set[int32], cidrs []string) error {
 	desiredPerms := NewIPPermissionSet()
 	for port := range ports {
 		for _, cidr := range cidrs {
-			perm := ec2types.IpPermission{
+			desiredPerms.Insert(ec2types.IpPermission{
 				IpProtocol: aws.String(protocol),
 				FromPort:   aws.Int32(int32(port)),
 				ToPort:     aws.Int32(int32(port)),
-			}
-
-			// Use Ipv6Ranges for IPv6 CIDRs, IpRanges for IPv4 CIDRs
-			if isIPv6CIDR(cidr) {
-				perm.Ipv6Ranges = []ec2types.Ipv6Range{
-					{
-						CidrIpv6:    aws.String(cidr),
-						Description: aws.String(ruleDesc),
-					},
-				}
-			} else {
-				perm.IpRanges = []ec2types.IpRange{
+				IpRanges: []ec2types.IpRange{
 					{
 						CidrIp:      aws.String(cidr),
 						Description: aws.String(ruleDesc),
 					},
-				}
-			}
-
-			desiredPerms.Insert(perm)
+				},
+			})
 		}
 	}
 
@@ -1210,7 +1099,6 @@ func (c *Cloud) updateInstanceSecurityGroupForNLBTraffic(ctx context.Context, sg
 func (c *Cloud) updateInstanceSecurityGroupForNLBMTU(ctx context.Context, sgID string, sgPerms IPPermissionSet) error {
 	desiredPerms := NewIPPermissionSet()
 	for _, perm := range sgPerms {
-		// Handle IPv4 ranges
 		for _, ipRange := range perm.IpRanges {
 			if strings.Contains(aws.ToString(ipRange.Description), NLBClientRuleDescription) {
 				desiredPerms.Insert(ec2types.IpPermission{
@@ -1220,22 +1108,6 @@ func (c *Cloud) updateInstanceSecurityGroupForNLBMTU(ctx context.Context, sgID s
 					IpRanges: []ec2types.IpRange{
 						{
 							CidrIp:      ipRange.CidrIp,
-							Description: aws.String(NLBMtuDiscoveryRuleDescription),
-						},
-					},
-				})
-			}
-		}
-		// Handle IPv6 ranges
-		for _, ipv6Range := range perm.Ipv6Ranges {
-			if strings.Contains(aws.ToString(ipv6Range.Description), NLBClientRuleDescription) {
-				desiredPerms.Insert(ec2types.IpPermission{
-					IpProtocol: aws.String("icmpv6"),
-					FromPort:   aws.Int32(2),
-					ToPort:     aws.Int32(-1),
-					Ipv6Ranges: []ec2types.Ipv6Range{
-						{
-							CidrIpv6:    ipv6Range.CidrIpv6,
 							Description: aws.String(NLBMtuDiscoveryRuleDescription),
 						},
 					},

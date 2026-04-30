@@ -26,7 +26,7 @@ OUTPUT ?= $(shell pwd)/_output
 INSTALL_PATH ?= $(OUTPUT)/bin
 LDFLAGS ?= -w -s -X k8s.io/component-base/version.gitVersion=$(VERSION) -X main.gitVersion=$(VERSION)
 
-GOLANG_DIRECTIVE_VERSION ?= 1.25.0
+GOLANG_DIRECTIVE_VERSION ?= 1.26.0
 CURL_RETRIES ?= 3
 
 # flags for ecr-credential-provider artifact promotion
@@ -44,7 +44,6 @@ aws-cloud-controller-manager:
 		cmd/aws-cloud-controller-manager/main.go
 
 .PHONY: ecr-credential-provider
-ecr-credential-provider: LDFLAGS = -w -s -X k8s.io/component-base/version.gitVersion=$(VERSION) -X main.gitVersion=$(VERSION)
 ecr-credential-provider:
 	 GO111MODULE=on CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOPROXY=$(GOPROXY) go build \
 		-trimpath \
