@@ -41,6 +41,7 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/smithy-go"
+	smithymiddleware "github.com/aws/smithy-go/middleware"
 	"gopkg.in/gcfg.v1"
 
 	v1 "k8s.io/api/core/v1"
@@ -519,7 +520,11 @@ func init() {
 
 		var creds *stscreds.AssumeRoleProvider
 		if cfg.Global.RoleARN != "" {
-			stsClient, err := services.NewStsClient(ctx, regionName, cfg.Global.RoleARN, cfg.Global.SourceARN)
+			stsClient, err := services.NewStsClient(ctx, regionName, cfg.Global.RoleARN, cfg.Global.SourceARN,
+				func(stack *smithymiddleware.Stack) error {
+					return stack.Deserialize.Add(awsAPIMetricsMiddleware(), smithymiddleware.After)
+				},
+			)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create sts v2 client: %v", err)
 			}
@@ -910,6 +915,11 @@ func (c *Cloud) InstanceExistsByProviderID(ctx context.Context, providerID strin
 	}
 	if len(instances) > 1 {
 		return false, fmt.Errorf("multiple instances found for instance: %s", instanceID)
+	}
+
+	if instances[0].State == nil {
+		klog.Warningf("the instance %s has nil state, assuming it no longer exists", instanceID)
+		return false, nil
 	}
 
 	state := instances[0].State.Name
