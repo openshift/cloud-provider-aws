@@ -18,6 +18,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -28,11 +29,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"k8s.io/cloud-provider-aws/pkg/providers/v1/config"
 )
@@ -1396,6 +1400,232 @@ func TestCreateSubnetMappings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			actualSubnetMappings := createSubnetMappings(tt.subnetIDs, tt.allocationIDs, tt.privateIPv4Addresses)
 			assert.Equal(t, tt.expectedSubnetMappings, actualSubnetMappings)
+		})
+	}
+}
+
+func TestCloud_removeOwnedSecurityGroups(t *testing.T) {
+	tests := []struct {
+		name                   string
+		securityGroups         []string
+		setupMocks             func(*MockedFakeEC2)
+		setupSecurityGroupTags func() map[string][]ec2types.Tag
+		expectError            bool
+		expectRevokeCallCount  int
+		expectDeleteCallCount  int
+	}{
+		{
+			name:           "successfully remove owned security groups",
+			securityGroups: []string{"sg-owned1", "sg-owned2"},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// Mock DescribeSecurityGroups for ownership check
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && (input.GroupIds[0] == "sg-owned1" || input.GroupIds[0] == "sg-owned2")
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-owned1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+					},
+				}, nil)
+
+				// Mock DescribeSecurityGroups for rule references
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.Filters) > 0
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-ref1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(80),
+								ToPort:     aws.Int32(80),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-owned1"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+
+				// Mock RevokeSecurityGroupIngress
+				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
+					return aws.ToString(input.GroupId) == "sg-ref1"
+				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
+
+				// Mock DeleteSecurityGroup
+				mockedEC2.On("DeleteSecurityGroup", mock.MatchedBy(func(input *ec2.DeleteSecurityGroupInput) bool {
+					return aws.ToString(input.GroupId) == "sg-owned1" || aws.ToString(input.GroupId) == "sg-owned2"
+				})).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+			},
+			expectError:           false,
+			expectRevokeCallCount: 2,
+			expectDeleteCallCount: 2,
+		},
+		{
+			name:           "skip non-owned security groups",
+			securityGroups: []string{"sg-not-owned1", "sg-not-owned2"},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// Mock DescribeSecurityGroups for ownership check - return non-owned
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && input.GroupIds[0] == "sg-not-owned1"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-not-owned1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("some-other-tag"),
+								Value: aws.String("some-value"),
+							},
+						},
+					},
+				}, nil)
+
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && input.GroupIds[0] == "sg-not-owned2"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-not-owned2"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("another-tag"),
+								Value: aws.String("another-value"),
+							},
+						},
+					},
+				}, nil)
+
+				// Mock DescribeSecurityGroups for rule references for sg-not-owned1
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.Filters) > 0 && len(input.Filters[0].Values) > 0 && input.Filters[0].Values[0] == "sg-not-owned1"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-ref1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(80),
+								ToPort:     aws.Int32(80),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-not-owned1"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+
+				// Mock DescribeSecurityGroups for rule references for sg-not-owned2
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.Filters) > 0 && len(input.Filters[0].Values) > 0 && input.Filters[0].Values[0] == "sg-not-owned2"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-ref2"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(443),
+								ToPort:     aws.Int32(443),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-not-owned2"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+
+				// Mock RevokeSecurityGroupIngress for sg-ref1
+				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
+					return aws.ToString(input.GroupId) == "sg-ref1"
+				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
+
+				// Mock RevokeSecurityGroupIngress for sg-ref2
+				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
+					return aws.ToString(input.GroupId) == "sg-ref2"
+				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
+
+				// DeleteSecurityGroup should NOT be called for non-owned groups
+			},
+			expectError:           false,
+			expectRevokeCallCount: 2,
+			expectDeleteCallCount: 0,
+		},
+		{
+			name:           "error checking ownership",
+			securityGroups: []string{"sg-error"},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// Mock DescribeSecurityGroups to return error
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && input.GroupIds[0] == "sg-error"
+				})).Return([]ec2types.SecurityGroup(nil), errors.New("AWS error"))
+			},
+			expectError:           true, // Function should return error when ownership check fails
+			expectRevokeCallCount: 0,
+			expectDeleteCallCount: 0,
+		},
+		{
+			name:           "empty security groups list",
+			securityGroups: []string{},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// No mocks needed for empty list
+			},
+			expectError:           false,
+			expectRevokeCallCount: 0,
+			expectDeleteCallCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockedEC2 := &MockedFakeEC2{}
+
+			// Setup mocks
+			tt.setupMocks(mockedEC2)
+
+			cloud := &Cloud{
+				ec2: mockedEC2,
+				tagging: awsTagging{
+					ClusterID: "test-cluster",
+				},
+			}
+
+			ctx := context.Background()
+			errs := cloud.removeOwnedSecurityGroups(ctx, "test-lb", tt.securityGroups)
+
+			if tt.expectError {
+				assert.NotEmpty(t, errs)
+			} else {
+				assert.Empty(t, errs)
+			}
+
+			mockedEC2.AssertExpectations(t)
 		})
 	}
 }
