@@ -18,6 +18,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -28,11 +29,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"k8s.io/cloud-provider-aws/pkg/providers/v1/config"
 )
@@ -347,7 +351,6 @@ func TestBuildTargetGroupName(t *testing.T) {
 		targetProtocol elbv2types.ProtocolEnum
 		targetType     elbv2types.TargetTypeEnum
 		nlbConfig      nlbPortMapping
-		ipAddressType  elbv2types.TargetGroupIpAddressTypeEnum
 	}
 	tests := []struct {
 		name      string
@@ -365,9 +368,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-d09db77308",
+			want: "k8s-default-servicea-7fa2e07508",
 		},
 		{
 			name:      "base case & clusterID changed",
@@ -379,9 +381,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-b8ce450922",
+			want: "k8s-default-servicea-719ee635da",
 		},
 		{
 			name:      "base case & serviceNamespace changed",
@@ -393,9 +394,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-another-servicea-8c06319cd6",
+			want: "k8s-another-servicea-f66e09847d",
 		},
 		{
 			name:      "base case & serviceName changed",
@@ -407,9 +407,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-serviceb-138b54c161",
+			want: "k8s-default-serviceb-196c19c881",
 		},
 		{
 			name:      "base case & servicePort changed",
@@ -421,9 +420,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-3398ce2582",
+			want: "k8s-default-servicea-06876706cb",
 		},
 		{
 			name:      "base case & nodePort changed",
@@ -435,9 +433,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-c829356629",
+			want: "k8s-default-servicea-119f844ec0",
 		},
 		{
 			name:      "base case & targetProtocol changed",
@@ -449,9 +446,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumUdp,
 				targetType:     elbv2types.TargetTypeEnumInstance,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-57da8753a8",
+			want: "k8s-default-servicea-3868761686",
 		},
 		{
 			name:      "base case & targetType changed",
@@ -463,9 +459,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 				targetProtocol: elbv2types.ProtocolEnumTcp,
 				targetType:     elbv2types.TargetTypeEnumIp,
 				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-5160ded19b",
+			want: "k8s-default-servicea-0fa31f4b0f",
 		},
 		{
 			name:      "custom healthcheck config",
@@ -482,23 +477,8 @@ func TestBuildTargetGroupName(t *testing.T) {
 						Interval: 10,
 					},
 				},
-				ipAddressType: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
 			},
-			want: "k8s-default-servicea-c3f46cd4ed",
-		},
-		{
-			name:      "base case & ipAddressType changed to ipv6",
-			clusterID: "cluster-a",
-			args: args{
-				serviceName:    types.NamespacedName{Namespace: "default", Name: "service-a"},
-				servicePort:    80,
-				nodePort:       8080,
-				targetProtocol: elbv2types.ProtocolEnumTcp,
-				targetType:     elbv2types.TargetTypeEnumInstance,
-				nlbConfig:      nlbPortMapping{},
-				ipAddressType:  elbv2types.TargetGroupIpAddressTypeEnumIpv6,
-			},
-			want: "k8s-default-servicea-6abd575e99",
+			want: "k8s-default-servicea-4028e49618",
 		},
 	}
 	for _, tt := range tests {
@@ -506,7 +486,7 @@ func TestBuildTargetGroupName(t *testing.T) {
 			c := &Cloud{
 				tagging: awsTagging{ClusterID: tt.clusterID},
 			}
-			if got := c.buildTargetGroupName(tt.args.serviceName, tt.args.servicePort, tt.args.nodePort, tt.args.targetProtocol, tt.args.targetType, tt.args.nlbConfig, tt.args.ipAddressType); got != tt.want {
+			if got := c.buildTargetGroupName(tt.args.serviceName, tt.args.servicePort, tt.args.nodePort, tt.args.targetProtocol, tt.args.targetType, tt.args.nlbConfig); got != tt.want {
 				assert.Equal(t, tt.want, got)
 			}
 		})
@@ -1400,6 +1380,232 @@ func TestCreateSubnetMappings(t *testing.T) {
 	}
 }
 
+func TestCloud_removeOwnedSecurityGroups(t *testing.T) {
+	tests := []struct {
+		name                   string
+		securityGroups         []string
+		setupMocks             func(*MockedFakeEC2)
+		setupSecurityGroupTags func() map[string][]ec2types.Tag
+		expectError            bool
+		expectRevokeCallCount  int
+		expectDeleteCallCount  int
+	}{
+		{
+			name:           "successfully remove owned security groups",
+			securityGroups: []string{"sg-owned1", "sg-owned2"},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// Mock DescribeSecurityGroups for ownership check
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && (input.GroupIds[0] == "sg-owned1" || input.GroupIds[0] == "sg-owned2")
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-owned1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+					},
+				}, nil)
+
+				// Mock DescribeSecurityGroups for rule references
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.Filters) > 0
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-ref1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(80),
+								ToPort:     aws.Int32(80),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-owned1"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+
+				// Mock RevokeSecurityGroupIngress
+				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
+					return aws.ToString(input.GroupId) == "sg-ref1"
+				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
+
+				// Mock DeleteSecurityGroup
+				mockedEC2.On("DeleteSecurityGroup", mock.MatchedBy(func(input *ec2.DeleteSecurityGroupInput) bool {
+					return aws.ToString(input.GroupId) == "sg-owned1" || aws.ToString(input.GroupId) == "sg-owned2"
+				})).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+			},
+			expectError:           false,
+			expectRevokeCallCount: 2,
+			expectDeleteCallCount: 2,
+		},
+		{
+			name:           "skip non-owned security groups",
+			securityGroups: []string{"sg-not-owned1", "sg-not-owned2"},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// Mock DescribeSecurityGroups for ownership check - return non-owned
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && input.GroupIds[0] == "sg-not-owned1"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-not-owned1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("some-other-tag"),
+								Value: aws.String("some-value"),
+							},
+						},
+					},
+				}, nil)
+
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && input.GroupIds[0] == "sg-not-owned2"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-not-owned2"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("another-tag"),
+								Value: aws.String("another-value"),
+							},
+						},
+					},
+				}, nil)
+
+				// Mock DescribeSecurityGroups for rule references for sg-not-owned1
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.Filters) > 0 && len(input.Filters[0].Values) > 0 && input.Filters[0].Values[0] == "sg-not-owned1"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-ref1"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(80),
+								ToPort:     aws.Int32(80),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-not-owned1"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+
+				// Mock DescribeSecurityGroups for rule references for sg-not-owned2
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.Filters) > 0 && len(input.Filters[0].Values) > 0 && input.Filters[0].Values[0] == "sg-not-owned2"
+				})).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-ref2"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(443),
+								ToPort:     aws.Int32(443),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-not-owned2"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+
+				// Mock RevokeSecurityGroupIngress for sg-ref1
+				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
+					return aws.ToString(input.GroupId) == "sg-ref1"
+				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
+
+				// Mock RevokeSecurityGroupIngress for sg-ref2
+				mockedEC2.On("RevokeSecurityGroupIngress", mock.MatchedBy(func(input *ec2.RevokeSecurityGroupIngressInput) bool {
+					return aws.ToString(input.GroupId) == "sg-ref2"
+				})).Return(&ec2.RevokeSecurityGroupIngressOutput{}, nil)
+
+				// DeleteSecurityGroup should NOT be called for non-owned groups
+			},
+			expectError:           false,
+			expectRevokeCallCount: 2,
+			expectDeleteCallCount: 0,
+		},
+		{
+			name:           "error checking ownership",
+			securityGroups: []string{"sg-error"},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// Mock DescribeSecurityGroups to return error
+				mockedEC2.On("DescribeSecurityGroups", mock.MatchedBy(func(input *ec2.DescribeSecurityGroupsInput) bool {
+					return len(input.GroupIds) == 1 && input.GroupIds[0] == "sg-error"
+				})).Return([]ec2types.SecurityGroup(nil), errors.New("AWS error"))
+			},
+			expectError:           true, // Function should return error when ownership check fails
+			expectRevokeCallCount: 0,
+			expectDeleteCallCount: 0,
+		},
+		{
+			name:           "empty security groups list",
+			securityGroups: []string{},
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				// No mocks needed for empty list
+			},
+			expectError:           false,
+			expectRevokeCallCount: 0,
+			expectDeleteCallCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockedEC2 := &MockedFakeEC2{}
+
+			// Setup mocks
+			tt.setupMocks(mockedEC2)
+
+			cloud := &Cloud{
+				ec2: mockedEC2,
+				tagging: awsTagging{
+					ClusterID: "test-cluster",
+				},
+			}
+
+			ctx := context.Background()
+			errs := cloud.removeOwnedSecurityGroups(ctx, "test-lb", tt.securityGroups)
+
+			if tt.expectError {
+				assert.NotEmpty(t, errs)
+			} else {
+				assert.Empty(t, errs)
+			}
+
+			mockedEC2.AssertExpectations(t)
+		})
+	}
+}
+
 // Unit test generated by Cursor AI
 func TestGetKeyValuePropertiesFromAnnotation_TargetGroupAttributes(t *testing.T) {
 	tests := []struct {
@@ -1946,6 +2152,204 @@ func TestCloud_reconcileTargetGroupsAttributes(t *testing.T) {
 	}
 }
 
+func TestCloud_buildSecurityGroupRuleReferences(t *testing.T) {
+	tests := []struct {
+		name                                 string
+		targetGroupID                        string
+		setupMocks                           func(*MockedFakeEC2)
+		expectError                          bool
+		expectedErrorContains                string
+		expectedGroupsWithTagsCount          int
+		expectedGroupsLinkedPermissionsCount int
+		additionalAssertions                 func(t *testing.T, groupsWithTags map[*ec2types.SecurityGroup]bool, groupsLinkedPermissions map[*ec2types.SecurityGroup]IPPermissionSet)
+	}{
+		{
+			name:          "success with cluster tagged security group and linked permissions",
+			targetGroupID: "sg-target",
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
+					Filters: []ec2types.Filter{
+						{
+							Name:   aws.String("ip-permission.group-id"),
+							Values: []string{"sg-target"},
+						},
+					},
+				}).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-owned"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("kubernetes.io/cluster/test-cluster"),
+								Value: aws.String("owned"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(80),
+								ToPort:     aws.Int32(80),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-target"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+			},
+			expectError:                          false,
+			expectedGroupsWithTagsCount:          1,
+			expectedGroupsLinkedPermissionsCount: 1,
+			additionalAssertions: func(t *testing.T, groupsWithTags map[*ec2types.SecurityGroup]bool, groupsLinkedPermissions map[*ec2types.SecurityGroup]IPPermissionSet) {
+				// Find the security group in the results
+				var foundSG *ec2types.SecurityGroup
+				for sg := range groupsWithTags {
+					if aws.ToString(sg.GroupId) == "sg-owned" {
+						foundSG = sg
+						break
+					}
+				}
+				require.NotNil(t, foundSG)
+
+				// Check that the security group has cluster tags
+				assert.True(t, groupsWithTags[foundSG])
+
+				// Check that the security group has linked permissions
+				assert.Equal(t, 1, groupsLinkedPermissions[foundSG].Len())
+			},
+		},
+		{
+			name:          "success with non-cluster tagged security group",
+			targetGroupID: "sg-target",
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
+					Filters: []ec2types.Filter{
+						{
+							Name:   aws.String("ip-permission.group-id"),
+							Values: []string{"sg-target"},
+						},
+					},
+				}).Return([]ec2types.SecurityGroup{
+					{
+						GroupId: aws.String("sg-unowned"),
+						Tags: []ec2types.Tag{
+							{
+								Key:   aws.String("some-other-tag"),
+								Value: aws.String("some-value"),
+							},
+						},
+						IpPermissions: []ec2types.IpPermission{
+							{
+								IpProtocol: aws.String("tcp"),
+								FromPort:   aws.Int32(80),
+								ToPort:     aws.Int32(80),
+								UserIdGroupPairs: []ec2types.UserIdGroupPair{
+									{
+										GroupId: aws.String("sg-target"),
+									},
+								},
+							},
+						},
+					},
+				}, nil)
+			},
+			expectError:                          false,
+			expectedGroupsWithTagsCount:          1,
+			expectedGroupsLinkedPermissionsCount: 1,
+			additionalAssertions: func(t *testing.T, groupsWithTags map[*ec2types.SecurityGroup]bool, groupsLinkedPermissions map[*ec2types.SecurityGroup]IPPermissionSet) {
+				// Find the security group in the linkedPermissions results
+				var foundSG *ec2types.SecurityGroup
+				for sg := range groupsLinkedPermissions {
+					if aws.ToString(sg.GroupId) == "sg-unowned" {
+						foundSG = sg
+						break
+					}
+				}
+				require.NotNil(t, foundSG)
+
+				// Check that the security group is in groupsWithTags but not cluster tagged
+				_, exists := groupsWithTags[foundSG]
+				assert.True(t, exists)
+
+				// Check that the security group is not cluster tagged
+				assert.False(t, groupsWithTags[foundSG])
+			},
+		},
+		{
+			name:          "error when DescribeSecurityGroups fails",
+			targetGroupID: "sg-target",
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
+					Filters: []ec2types.Filter{
+						{
+							Name:   aws.String("ip-permission.group-id"),
+							Values: []string{"sg-target"},
+						},
+					},
+				}).Return([]ec2types.SecurityGroup{}, errors.New("AWS API error"))
+			},
+			expectError:                          true,
+			expectedErrorContains:                "error querying security groups for ELB",
+			expectedGroupsWithTagsCount:          0,
+			expectedGroupsLinkedPermissionsCount: 0,
+		},
+		{
+			name:          "success with no security groups found",
+			targetGroupID: "sg-target",
+			setupMocks: func(mockedEC2 *MockedFakeEC2) {
+				mockedEC2.On("DescribeSecurityGroups", &ec2.DescribeSecurityGroupsInput{
+					Filters: []ec2types.Filter{
+						{
+							Name:   aws.String("ip-permission.group-id"),
+							Values: []string{"sg-target"},
+						},
+					},
+				}).Return([]ec2types.SecurityGroup{}, nil)
+			},
+			expectError:                          false,
+			expectedGroupsWithTagsCount:          0,
+			expectedGroupsLinkedPermissionsCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockedEC2 := &MockedFakeEC2{}
+			tt.setupMocks(mockedEC2)
+
+			c := &Cloud{
+				ec2:    mockedEC2,
+				region: "us-west-2",
+				tagging: awsTagging{
+					ClusterID: "test-cluster",
+				},
+			}
+
+			ctx := context.TODO()
+			groupsWithTags, groupsLinkedPermissions, err := c.buildSecurityGroupRuleReferences(ctx, tt.targetGroupID)
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.expectedErrorContains != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrorContains)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Len(t, groupsWithTags, tt.expectedGroupsWithTagsCount)
+			assert.Len(t, groupsLinkedPermissions, tt.expectedGroupsLinkedPermissionsCount)
+
+			if tt.additionalAssertions != nil {
+				tt.additionalAssertions(t, groupsWithTags, groupsLinkedPermissions)
+			}
+
+			mockedEC2.AssertExpectations(t)
+		})
+	}
+}
+
 // Test-specific mock for ELB v2 client that embeds MockedFakeELBV2
 type mockELBV2ClientForEnsureTargetGroupTargets struct {
 	*MockedFakeELBV2
@@ -1975,7 +2379,6 @@ func TestCloud_ensureTargetGroupTargets(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		service         *v1.Service
 		maxTargets      int
 		expectedTargets []*elbv2types.TargetDescription
 		actualTargets   []*elbv2types.TargetDescription
@@ -2097,204 +2500,6 @@ func TestCloud_ensureTargetGroupTargets(t *testing.T) {
 			} else {
 				assert.NoError(t, err, "Expected no error for test case: %s", tt.description)
 			}
-		})
-	}
-}
-
-func TestGetTargetGroupIPAddressTypeFromService(t *testing.T) {
-	tests := []struct {
-		name     string
-		service  *v1.Service
-		expected elbv2types.TargetGroupIpAddressTypeEnum
-	}{
-		{
-			name: "IPv6 as first IP family",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-				},
-			},
-			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv6,
-		},
-		{
-			name: "IPv6 as only IP family",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol},
-				},
-			},
-			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv6,
-		},
-		{
-			name: "IPv4 as first IP family",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
-				},
-			},
-			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
-		},
-		{
-			name: "IPv4 as only IP family",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
-				},
-			},
-			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
-		},
-		{
-			name: "No IP families specified (defaults to IPv4)",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{},
-				},
-			},
-			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
-		},
-		{
-			name:     "Nil service (defaults to IPv4)",
-			service:  nil,
-			expected: elbv2types.TargetGroupIpAddressTypeEnumIpv4,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getTargetGroupIPAddressTypeFromService(tt.service)
-			assert.Equal(t, tt.expected, result, "IP address type should match expected for test case: %s", tt.name)
-		})
-	}
-}
-
-func TestServiceRequestsIPv6(t *testing.T) {
-	tests := []struct {
-		name     string
-		service  *v1.Service
-		expected bool
-	}{
-		{
-			name: "IPv6 only",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "Dual-stack IPv4 first",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "Dual-stack IPv6 first",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "IPv4 only",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "No IP families",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{},
-				},
-			},
-			expected: false,
-		},
-		{
-			name:     "Nil service",
-			service:  nil,
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := serviceRequestsIPv6(tt.service)
-			assert.Equal(t, tt.expected, result, "IPv6 support detection should match expected for test case: %s", tt.name)
-		})
-	}
-}
-
-func TestGetLoadBalancerIpAddressType(t *testing.T) {
-	tests := []struct {
-		name     string
-		service  *v1.Service
-		expected elbv2types.IpAddressType
-	}{
-		{
-			name: "No IP families defined",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{},
-				},
-			},
-			expected: elbv2types.IpAddressTypeIpv4,
-		},
-		{
-			name: "Only IPv4 defined",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
-				},
-			},
-			expected: elbv2types.IpAddressTypeIpv4,
-		},
-		{
-			name: "Only IPv6 defined",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol},
-				},
-			},
-			expected: elbv2types.IpAddressTypeDualstack,
-		},
-		{
-			name: "IPv6 and IPv4",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-				},
-			},
-			expected: elbv2types.IpAddressTypeDualstack,
-		},
-		{
-			name: "IPv4 and IPv6",
-			service: &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol},
-				},
-			},
-			expected: elbv2types.IpAddressTypeDualstack,
-		},
-		{
-			name:     "No service",
-			service:  nil,
-			expected: elbv2types.IpAddressTypeIpv4,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getLoadBalancerIPAddressTypeFromService(tt.service)
-			assert.Equal(t, tt.expected, result, "IP address type did not expected for test case: %s", tt.name)
 		})
 	}
 }
