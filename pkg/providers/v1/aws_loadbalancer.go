@@ -1400,24 +1400,25 @@ func (c *Cloud) ensureLoadBalancer(ctx context.Context, namespacedName types.Nam
 
 		{
 			// Sync security groups
-			expected := sets.New[string](securityGroupIDs...)
-			actual := stringSetFromList(loadBalancer.SecurityGroups)
+			expected := sets.New(securityGroupIDs...)
+			actual := sets.New(loadBalancer.SecurityGroups...)
 
 			if !expected.Equal(actual) {
 				// This call just replaces the security groups, unlike e.g. subnets (!)
-				request := &elb.ApplySecurityGroupsToLoadBalancerInput{}
-				request.LoadBalancerName = aws.String(loadBalancerName)
-				if securityGroupIDs == nil {
-					request.SecurityGroups = nil
-				} else {
-					request.SecurityGroups = securityGroupIDs
-				}
-				klog.V(2).Info("Applying updated security groups to load balancer")
-				_, err := c.elb.ApplySecurityGroupsToLoadBalancer(ctx, request)
-				if err != nil {
+				klog.V(2).Infof("Applying updated security groups to load balancer %q", loadBalancerName)
+				if _, err := c.elb.ApplySecurityGroupsToLoadBalancer(ctx, &elb.ApplySecurityGroupsToLoadBalancerInput{
+					LoadBalancerName: aws.String(loadBalancerName),
+					SecurityGroups:   securityGroupIDs,
+				}); err != nil {
 					return nil, fmt.Errorf("error applying AWS loadbalancer security groups: %q", err)
 				}
 				dirty = true
+
+				// Ensure the replaced security groups are removed from AWS when owned by the controller.
+				// Only remove groups that were in `actual` but not in `expected` (the ones being replaced).
+				if errs := c.removeOwnedSecurityGroups(ctx, loadBalancerName, actual.Difference(expected).UnsortedList()); len(errs) > 0 {
+					return nil, fmt.Errorf("error removing owned security groups: %v", errs)
+				}
 			}
 		}
 

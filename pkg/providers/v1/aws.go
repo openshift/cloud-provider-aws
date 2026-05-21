@@ -2263,8 +2263,9 @@ func (c *Cloud) buildNLBHealthCheckConfiguration(svc *v1.Service) (healthCheckCo
 //   - []string: Security group IDs to attach to the NLB.
 //   - bool: true if SGs are managed (need rules), false if BYO (don't modify).
 //   - error: An error if any issue occurs.
-func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, clusterName string, svc *v1.Service, existingLB *elbv2types.LoadBalancer, annotations map[string]string) ([]string, bool, error) {
+func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, clusterName string, svc *v1.Service, existingLB *elbv2types.LoadBalancer) ([]string, bool, error) {
 	serviceName := types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}
+	annotations := svc.Annotations
 
 	// Determine NLB Security Group Mode
 	isManaged, err := c.cfg.IsNLBSecurityGroupModeManaged()
@@ -2275,6 +2276,10 @@ func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, clusterName string, 
 	// Managed mode disabled: keep existing SGs (if LB exists) or return empty
 	if !isManaged {
 		if existingLB != nil {
+			// Return empty slice if SecurityGroups is nil to maintain consistent return type
+			if existingLB.SecurityGroups == nil {
+				return []string{}, false, nil
+			}
 			return existingLB.SecurityGroups, false, nil
 		}
 		return []string{}, false, nil
@@ -2354,17 +2359,6 @@ func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, securityGroupID
 	}
 	// Separate source CIDRs into IPv4 and IPv6 ranges
 	ec2SourceRanges, ec2Ipv6SourceRanges := separateIPv4AndIPv6CIDRs(sourceCIDRs)
-
-	// Check if managed mode is enabled
-	isManaged, err := c.cfg.IsNLBSecurityGroupModeManaged()
-	if err != nil {
-		return fmt.Errorf("error checking NLB security group mode: %w", err)
-	}
-
-	// Don't manage rules when managed mode is disabled
-	if !isManaged {
-		return nil
-	}
 
 	// Build ingress rules from NLB port mappings
 	ingressRules := NewIPPermissionSet()
@@ -2535,7 +2529,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 
 		// Create/retrieve the Security Groups to be used with the NLB (aligned with CLB pattern)
-		securityGroupIDs, isManagedSg, err := c.ensureNLBSecurityGroup(ctx, clusterName, apiService, existingLB, annotations)
+		securityGroupIDs, isManagedSg, err := c.ensureNLBSecurityGroup(ctx, clusterName, apiService, existingLB)
 		if err != nil {
 			return nil, fmt.Errorf("error ensuring NLB security group: %w", err)
 		}
@@ -3061,19 +3055,9 @@ func (c *Cloud) updateInstanceSecurityGroupsForLoadBalancer(ctx context.Context,
 	loadBalancerSecurityGroupID := lbSecurityGroupIDs[0]
 
 	// Get the actual list of groups that allow ingress from the load-balancer
-	actualGroups := make(map[*ec2types.SecurityGroup]bool)
-	{
-		describeRequest := &ec2.DescribeSecurityGroupsInput{}
-		describeRequest.Filters = []ec2types.Filter{
-			newEc2Filter("ip-permission.group-id", loadBalancerSecurityGroupID),
-		}
-		response, err := c.ec2.DescribeSecurityGroups(ctx, describeRequest)
-		if err != nil {
-			return fmt.Errorf("error querying security groups for ELB: %q", err)
-		}
-		for _, sg := range response {
-			actualGroups[&sg] = c.tagging.hasClusterTag(sg.Tags)
-		}
+	actualGroups, _, err := c.buildSecurityGroupRuleReferences(ctx, loadBalancerSecurityGroupID)
+	if err != nil {
+		return fmt.Errorf("error building security group rule references: %w", err)
 	}
 
 	// Open the firewall from the load balancer to the instance
