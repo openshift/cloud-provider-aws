@@ -16,7 +16,7 @@ The service controller is responsible for watch for service and node object chan
 | service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout           | [1-4000]                            | 60  | ELB | The load balancer has a configured idle timeout period (in seconds) that applies to its connections. If no data has been sent or received by the time that the idle timeout period elapses, the load balancer closes the connection. |
 | service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled | [true\|false]                       | -   | ELB | With cross-zone load balancing, each load balancer node for your Classic Load Balancer distributes requests evenly across the registered instances in all enabled Availability Zones. If cross-zone load balancing is disabled, each load balancer node distributes requests evenly across the registered instances in its Availability Zone only. |
 | service.beta.kubernetes.io/aws-load-balancer-extra-security-groups             | Comma-separated list                | -   | ELB | Specifies additional security groups to be added to ELB.    |
-| service.beta.kubernetes.io/aws-load-balancer-security-groups                   | Comma-separated list                | -   | ELB | Specifies the security groups to be added to ELB. Differently from the annotation "service.beta.kubernetes.io/aws-load-balancer-extra-security-groups", this replaces all other security groups previously assigned to the ELB. |
+| service.beta.kubernetes.io/aws-load-balancer-security-groups                   | Comma-separated list                | -   | ELB,NLB | Specifies the security groups to be added to ELB or NLB. Unlike the annotation "service.beta.kubernetes.io/aws-load-balancer-extra-security-groups", this replaces all other security groups previously assigned to the load balancer. For NLBs the annotation requires `NLBSecurityGroupMode = Managed` to be set in the cloud-config. |
 | service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold     | [2-10]                              | -   | NLB | Specifies the number of successive successful health checks required for a backend to be considered healthy for traffic. For NLB, healthy-threshold and unhealthy-threshold must be equal. |
 | service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval              | [5-300]                             | 30  | NLB | Specifies, in seconds, the interval between health checks. |
 | service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout               | [2-60]                              | 5   | NLB | The amount of time to wait when receiving a response from the health check, in seconds. |
@@ -85,66 +85,4 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-internal: true
     service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=false,proxy_protocol_v2.enabled=true
 [...]
-```
-
-## Dual stack services with IPv6
-
-Services can be created using solely IPv4 networking (the default), or with dual stack support per the [Kubernetes Service specification](https://kubernetes.io/docs/concepts/services-networking/dual-stack/).
-The service must be created with a Network Load Balancer, and the Kubernetes control plane must be configured to support IPv6 CIDRs.
-
-Note: When using the [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/), Services will default to having the `spec.loadBalancerClass` field populated via a MutatingWebhookConfiguration.
-This webhook must be disabled to allow the cloud controller manager to handle services.
-
-Some limitations to be aware of when using dual stack load balancers:
-
-- The `spec.ipFamilies` field can have a second family added or removed, but the first entry is immutable after Service creation.
-- Load balanced targets are registered based on the instances, not their IP addresses.
-- A Service cannot be IPv6 only; it must either be IPv4 or dual stack, even if IPv6 is the only IP family specified.
-
-### Usage Example 1 - creating a dual stack load balancer, requiring both stacks
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: $SVC_NAME
-  namespace: ${APP_NAMESPACE}
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: nlb
-spec:
-    type: LoadBalancer
-    ipFamilies:
-        - IPv6
-        - IPv4
-    ipFamilyPolicy: RequireDualStack # Require both stacks are present on the service.
-    selector:
-        app: myapp
-    ports:
-        - port: 80
-          targetPort: 8080
-          protocol: TCP
-```
-
-### Usage Example 2 - creating a dual stack load balancer, falling back to IPv4
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: $SVC_NAME
-  namespace: ${APP_NAMESPACE}
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: nlb
-spec:
-    type: LoadBalancer
-    ipFamilies:
-        - IPv4
-        - IPv6
-    ipFamilyPolicy: PreferDualStack # If dual stack is not configured or present, fall back to IPv4.
-    selector:
-        app: myapp
-    ports:
-        - port: 80
-          targetPort: 8080
-          protocol: TCP
 ```

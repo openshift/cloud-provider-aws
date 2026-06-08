@@ -303,14 +303,14 @@ func TestValidateServiceAnnotations(t *testing.T) {
 			expectedError: "",
 		},
 
-		// Error cases - NLB should reject BYO security group annotations
+		// BYO SG annotations validation
 		{
-			name: "NLB with BYO SG annotation - error (not supported)",
+			name: "NLB with BYO SG annotation - should pass validations",
 			annotations: map[string]string{
 				ServiceAnnotationLoadBalancerType:           "nlb",
 				ServiceAnnotationLoadBalancerSecurityGroups: byoSecurityGroupID,
 			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
+			expectedError: "",
 		},
 		{
 			name: "NLB with BYO extra SG annotation - error (not supported)",
@@ -321,78 +321,37 @@ func TestValidateServiceAnnotations(t *testing.T) {
 			expectedError: "BYO extra security group annotation \"service.beta.kubernetes.io/aws-load-balancer-extra-security-groups\" is not supported by NLB",
 		},
 		{
-			name: "NLB with both BYO SG annotations - error (not supported)",
+			name: "NLB with both BYO SG annotations - extra SG error still applies",
 			annotations: map[string]string{
 				ServiceAnnotationLoadBalancerType:                "nlb",
 				ServiceAnnotationLoadBalancerSecurityGroups:      byoSecurityGroupID,
 				ServiceAnnotationLoadBalancerExtraSecurityGroups: "sg-extra123",
 			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
+			expectedError: "BYO extra security group annotation \"service.beta.kubernetes.io/aws-load-balancer-extra-security-groups\" is not supported by NLB",
 		},
 		{
-			name: "NLB with BYO SG with empty value - error (not supported)",
+			name: "NLB with BYO extra SG with empty value - error (not supported)",
 			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: "",
+				ServiceAnnotationLoadBalancerType:                "nlb",
+				ServiceAnnotationLoadBalancerExtraSecurityGroups: "BYO extra security group annotation \"service.beta.kubernetes.io/aws-load-balancer-extra-security-groups\" is not supported by NLB",
 			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
+			expectedError: "BYO extra security group annotation \"service.beta.kubernetes.io/aws-load-balancer-extra-security-groups\" is not supported by NLB",
 		},
 		{
-			name: "NLB with BYO SG with multiple values - error (not supported)",
+			name: "NLB with BYO extra SG with multiple values - error (not supported)",
+			annotations: map[string]string{
+				ServiceAnnotationLoadBalancerType:                "nlb",
+				ServiceAnnotationLoadBalancerExtraSecurityGroups: "sg-123,sg-456",
+			},
+			expectedError: "BYO extra security group annotation \"service.beta.kubernetes.io/aws-load-balancer-extra-security-groups\" is not supported by NLB",
+		},
+		{
+			name: "NLB with BYO SG with multiple values - should pass validations",
 			annotations: map[string]string{
 				ServiceAnnotationLoadBalancerType:           "nlb",
 				ServiceAnnotationLoadBalancerSecurityGroups: "sg-123,sg-456",
 			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB with single BYO SG - error (not supported)",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: "sg-123456789",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB with multiple BYO SGs - error (not supported)",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: "sg-123456789,sg-987654321",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB with invalid BYO SG format - error (not supported)",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: "invalid-sg-format",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB case sensitivity - BYO SG annotation with different casing should still be rejected",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: "SG-123ABC",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB mixed annotations - BYO and other annotations",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerSecurityGroups: "sg-123456",
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerInternal:       "true",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
-		},
-		{
-			name: "NLB whitespace in BYO SG values - should still be rejected",
-			annotations: map[string]string{
-				ServiceAnnotationLoadBalancerType:           "nlb",
-				ServiceAnnotationLoadBalancerSecurityGroups: " sg-123456 ",
-			},
-			expectedError: "BYO security group annotation \"service.beta.kubernetes.io/aws-load-balancer-security-groups\" is not supported by NLB",
+			expectedError: "",
 		},
 
 		// Target group attributes validation for NLB (should succeed)
@@ -559,231 +518,6 @@ func TestValidateServiceAnnotations(t *testing.T) {
 				assert.NoError(t, err, "Expected no error for test case: %s", tt.name)
 			} else {
 				assert.Error(t, err, "Expected error for test case: %s", tt.name)
-				assert.Contains(t, err.Error(), tt.expectedError, "Error message should contain expected text for test case: %s", tt.name)
-			}
-		})
-	}
-}
-
-func TestCanFallbackToIPv4(t *testing.T) {
-	singleStack := v1.IPFamilyPolicySingleStack
-	preferDualStack := v1.IPFamilyPolicyPreferDualStack
-	requireDualStack := v1.IPFamilyPolicyRequireDualStack
-
-	tests := []struct {
-		name    string
-		service *v1.Service
-		want    bool
-	}{
-		// nil service
-		{
-			name:    "nil service",
-			service: nil,
-			want:    true,
-		},
-
-		// nil policy (implicit SingleStack)
-		{
-			name:    "nil policy, no families",
-			service: &v1.Service{Spec: v1.ServiceSpec{}},
-			want:    true,
-		},
-		{
-			name:    "nil policy, IPv4 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilies: []v1.IPFamily{v1.IPv4Protocol}}},
-			want:    true,
-		},
-		{
-			name:    "nil policy, IPv6 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilies: []v1.IPFamily{v1.IPv6Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "nil policy, IPv4 then IPv6",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "nil policy, IPv6 then IPv4",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol}}},
-			want:    false,
-		},
-
-		// SingleStack
-		{
-			name:    "SingleStack, no families",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &singleStack}},
-			want:    true,
-		},
-		{
-			name:    "SingleStack, IPv4 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &singleStack, IPFamilies: []v1.IPFamily{v1.IPv4Protocol}}},
-			want:    true,
-		},
-		{
-			name:    "SingleStack, IPv6 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &singleStack, IPFamilies: []v1.IPFamily{v1.IPv6Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "SingleStack, IPv4 then IPv6",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &singleStack, IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "SingleStack, IPv6 then IPv4",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &singleStack, IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol}}},
-			want:    false,
-		},
-
-		// PreferDualStack
-		{
-			name:    "PreferDualStack, no families",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &preferDualStack}},
-			want:    true,
-		},
-		{
-			name:    "PreferDualStack, IPv4 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &preferDualStack, IPFamilies: []v1.IPFamily{v1.IPv4Protocol}}},
-			want:    true,
-		},
-		{
-			name:    "PreferDualStack, IPv6 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &preferDualStack, IPFamilies: []v1.IPFamily{v1.IPv6Protocol}}},
-			want:    true,
-		},
-		{
-			name:    "PreferDualStack, IPv4 then IPv6",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &preferDualStack, IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol}}},
-			want:    true,
-		},
-		{
-			name:    "PreferDualStack, IPv6 then IPv4",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &preferDualStack, IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol}}},
-			want:    true,
-		},
-
-		// RequireDualStack
-		{
-			name:    "RequireDualStack, no families",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &requireDualStack}},
-			want:    false,
-		},
-		{
-			name:    "RequireDualStack, IPv4 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &requireDualStack, IPFamilies: []v1.IPFamily{v1.IPv4Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "RequireDualStack, IPv6 only",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &requireDualStack, IPFamilies: []v1.IPFamily{v1.IPv6Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "RequireDualStack, IPv4 then IPv6",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &requireDualStack, IPFamilies: []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol}}},
-			want:    false,
-		},
-		{
-			name:    "RequireDualStack, IPv6 then IPv4",
-			service: &v1.Service{Spec: v1.ServiceSpec{IPFamilyPolicy: &requireDualStack, IPFamilies: []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol}}},
-			want:    false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := canFallbackToIPv4(tt.service)
-			assert.Equal(t, tt.want, got, "canFallbackToIPv4 mismatch for test case: %s", tt.name)
-		})
-	}
-}
-
-func TestValidateIPFamilyInfo(t *testing.T) {
-	tests := []struct {
-		name           string
-		ipFamilyPolicy v1.IPFamilyPolicy
-		ipFamilies     []v1.IPFamily
-		expectedError  string
-	}{
-		{
-			name:           "SingleStack IPv6 errors",
-			ipFamilyPolicy: v1.IPFamilyPolicySingleStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol},
-			expectedError:  "single stack IPv6 is not supported for network load balancers",
-		},
-		{
-			name:           "SingleStack IPv4 works",
-			ipFamilyPolicy: v1.IPFamilyPolicySingleStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv4Protocol},
-			expectedError:  "",
-		},
-		{
-			name:           "RequireDualStack with one family errors",
-			ipFamilyPolicy: v1.IPFamilyPolicyRequireDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol},
-			expectedError:  "policy RequireDualStack requires 2 entries in the ipFamilies field. got 1",
-		},
-		{
-			name:           "PreferDualStack with too many entries errors",
-			ipFamilyPolicy: v1.IPFamilyPolicyPreferDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol, v1.IPv4Protocol},
-			expectedError:  "ipFamilies requires 1 or 2 entries. got 3",
-		},
-		{
-			name:           "PreferDualStack with one entry works",
-			ipFamilyPolicy: v1.IPFamilyPolicyPreferDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol},
-			expectedError:  "",
-		},
-		{
-			name:           "PreferDualStack with two entries works",
-			ipFamilyPolicy: v1.IPFamilyPolicyPreferDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-			expectedError:  "",
-		},
-		{
-			name:           "PreferDualStack with two entries works",
-			ipFamilyPolicy: v1.IPFamilyPolicyPreferDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-			expectedError:  "",
-		},
-		{
-			name:           "RequireDualStack with two entries works",
-			ipFamilyPolicy: v1.IPFamilyPolicyPreferDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-			expectedError:  "",
-		},
-		{
-			name:           "RequireDualStack with two entries works",
-			ipFamilyPolicy: v1.IPFamilyPolicyPreferDualStack,
-			ipFamilies:     []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol},
-			expectedError:  "",
-		},
-		{
-			name:           "IPFamily fields empty works (backwards compat, implies SingleStack IPv4)",
-			ipFamilyPolicy: "",
-			ipFamilies:     []v1.IPFamily{},
-			expectedError:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &v1.Service{
-				Spec: v1.ServiceSpec{
-					IPFamilyPolicy: &tt.ipFamilyPolicy,
-					IPFamilies:     tt.ipFamilies,
-				},
-			}
-
-			err := validateIPFamilyInfo(s, serviceRequestsIPv6(s))
-
-			if tt.expectedError == "" {
-				assert.NoError(t, err, "Expected no error for test case: %s", tt.name)
-			} else {
-				assert.Error(t, err, "Expected error for test case: %s", tt.name)
-				assert.Equal(t, err.Error(), tt.expectedError, "Expected error for test case: %s", tt.name)
 				assert.Contains(t, err.Error(), tt.expectedError, "Error message should contain expected text for test case: %s", tt.name)
 			}
 		})
