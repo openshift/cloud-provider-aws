@@ -4472,6 +4472,39 @@ func TestCreateSecurityGroupRules(t *testing.T) {
 	}
 }
 
+// TestNLBListenerIPProtocol guards against OCPBUGS-115250: an NLB TLS listener
+// must map to IP protocol "tcp" for security group ingress rules, since EC2
+// rejects "tls" as an IP protocol with "Invalid value 'tls' for IP protocol".
+func TestNLBListenerIPProtocol(t *testing.T) {
+	testCases := []struct {
+		name     string
+		protocol elbv2types.ProtocolEnum
+		expected string
+	}{
+		{
+			name:     "TCP listener maps to tcp",
+			protocol: elbv2types.ProtocolEnumTcp,
+			expected: "tcp",
+		},
+		{
+			name:     "UDP listener maps to udp",
+			protocol: elbv2types.ProtocolEnumUdp,
+			expected: "udp",
+		},
+		{
+			name:     "TLS listener maps to tcp",
+			protocol: elbv2types.ProtocolEnumTls,
+			expected: "tcp",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, nlbListenerIPProtocol(tc.protocol))
+		})
+	}
+}
+
 func TestCreateSecurityGroup(t *testing.T) {
 	awsServices := newMockedFakeAWSServices(TestClusterID)
 	cfg := config.CloudConfig{}

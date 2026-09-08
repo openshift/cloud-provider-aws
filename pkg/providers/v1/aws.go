@@ -2321,6 +2321,18 @@ func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, clusterName string, 
 	return []string{securityGroupID}, true, nil // Managed SG: attach rules
 }
 
+// nlbListenerIPProtocol maps an NLB listener protocol to the IP protocol used
+// for EC2 security group ingress rules. NLB listeners are TCP, UDP, or TLS;
+// TLS runs over TCP, so anything that is not UDP maps to tcp. This avoids
+// passing "tls" to AuthorizeSecurityGroupIngress, which EC2 rejects with
+// "Invalid value 'tls' for IP protocol".
+func nlbListenerIPProtocol(protocol elbv2types.ProtocolEnum) string {
+	if protocol == elbv2types.ProtocolEnumUdp {
+		return "udp"
+	}
+	return "tcp"
+}
+
 // ensureNLBSecurityGroupRules ensures the NLB frontend security group rules are created and configured
 // based on the load balancer port mappings (Load Balancer listeners), allowing traffic from the
 // specified source ranges.
@@ -2344,7 +2356,7 @@ func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, securityGroupID
 		ingressRules.Insert(ec2types.IpPermission{
 			FromPort:   aws.Int32(int32(mapping.FrontendPort)),
 			ToPort:     aws.Int32(int32(mapping.FrontendPort)),
-			IpProtocol: aws.String(strings.ToLower(string((mapping.FrontendProtocol)))),
+			IpProtocol: aws.String(nlbListenerIPProtocol(mapping.FrontendProtocol)),
 			IpRanges:   ec2SourceRanges,
 		})
 	}
