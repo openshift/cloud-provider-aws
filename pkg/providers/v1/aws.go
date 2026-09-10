@@ -41,7 +41,6 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/smithy-go"
-	smithymiddleware "github.com/aws/smithy-go/middleware"
 	"gopkg.in/gcfg.v1"
 
 	v1 "k8s.io/api/core/v1"
@@ -359,7 +358,6 @@ type ELBV2 interface {
 	DescribeLoadBalancers(ctx context.Context, input *elbv2.DescribeLoadBalancersInput, optFns ...func(*elbv2.Options)) (*elbv2.DescribeLoadBalancersOutput, error)
 	DeleteLoadBalancer(ctx context.Context, input *elbv2.DeleteLoadBalancerInput, optFns ...func(*elbv2.Options)) (*elbv2.DeleteLoadBalancerOutput, error)
 	SetSecurityGroups(ctx context.Context, input *elbv2.SetSecurityGroupsInput, optFns ...func(*elbv2.Options)) (*elbv2.SetSecurityGroupsOutput, error)
-	SetIpAddressType(ctx context.Context, input *elbv2.SetIpAddressTypeInput, optFns ...func(*elbv2.Options)) (*elbv2.SetIpAddressTypeOutput, error)
 
 	ModifyLoadBalancerAttributes(ctx context.Context, input *elbv2.ModifyLoadBalancerAttributesInput, optFns ...func(*elbv2.Options)) (*elbv2.ModifyLoadBalancerAttributesOutput, error)
 	DescribeLoadBalancerAttributes(ctx context.Context, input *elbv2.DescribeLoadBalancerAttributesInput, optFns ...func(*elbv2.Options)) (*elbv2.DescribeLoadBalancerAttributesOutput, error)
@@ -521,9 +519,7 @@ func init() {
 		var creds *stscreds.AssumeRoleProvider
 		if cfg.Global.RoleARN != "" {
 			stsClient, err := services.NewStsClient(ctx, regionName, cfg.Global.RoleARN, cfg.Global.SourceARN,
-				func(stack *smithymiddleware.Stack) error {
-					return stack.Deserialize.Add(awsAPIMetricsMiddleware(), smithymiddleware.After)
-				},
+				addAWSAPIMetricsMiddleware,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create sts v2 client: %v", err)
@@ -2032,11 +2028,10 @@ func (c *Cloud) buildELBSecurityGroupList(ctx context.Context, serviceName types
 //   - sgID: The ID of the security group to configure.
 //   - rules: An existing permission set of rules to be added to the security group.
 //   - ec2SourceRanges: A slice of *ec2.IpRange objects specifying the source IP ranges for the rules.
-//   - ec2Ipv6SourceRanges: A slice of *ec2.Ipv6Range objects specifying the source IPv6 ranges for the rules.
 //
 // Returns:
 //   - error: An error if any issue occurs while creating or applying the security group rules.
-func (c *Cloud) createSecurityGroupRules(ctx context.Context, sgID string, rules IPPermissionSet, ec2SourceRanges []ec2types.IpRange, ec2Ipv6SourceRanges []ec2types.Ipv6Range) error {
+func (c *Cloud) createSecurityGroupRules(ctx context.Context, sgID string, rules IPPermissionSet, ec2SourceRanges []ec2types.IpRange) error {
 	if len(sgID) == 0 {
 		return fmt.Errorf("security group ID cannot be empty")
 	}
@@ -2046,7 +2041,6 @@ func (c *Cloud) createSecurityGroupRules(ctx context.Context, sgID string, rules
 		FromPort:   aws.Int32(3),
 		ToPort:     aws.Int32(4),
 		IpRanges:   ec2SourceRanges,
-		Ipv6Ranges: ec2Ipv6SourceRanges,
 	}
 	rules.Insert(permission)
 
@@ -2149,16 +2143,7 @@ func (c *Cloud) getSubnetCidrs(ctx context.Context, subnetIDs []string) ([]strin
 
 	cidrs := make([]string, 0, len(subnets))
 	for _, subnet := range subnets {
-		// Add IPv4 CIDR
 		cidrs = append(cidrs, aws.ToString(subnet.CidrBlock))
-
-		// Add IPv6 CIDRs if present
-		for _, ipv6Association := range subnet.Ipv6CidrBlockAssociationSet {
-			if ipv6Association.Ipv6CidrBlockState != nil &&
-				ipv6Association.Ipv6CidrBlockState.State == ec2types.SubnetCidrBlockStateCodeAssociated {
-				cidrs = append(cidrs, aws.ToString(ipv6Association.Ipv6CidrBlock))
-			}
-		}
 	}
 	return cidrs, nil
 }
@@ -2331,35 +2316,21 @@ func (c *Cloud) ensureNLBSecurityGroup(ctx context.Context, clusterName string, 
 	if err != nil {
 		return nil, false, fmt.Errorf("unable to create security group for NLB: %w", err)
 	}
-	klog.Infof("Created NLB security group %q for service %q", securityGroupID, serviceName)
+	klog.Infof("Ensured security group %q for NLB service %q", sgName, serviceName)
 
 	return []string{securityGroupID}, true, nil // Managed SG: attach rules
 }
 
-// separateIPv4AndIPv6CIDRs separates a list of CIDR strings into IPv4 and IPv6 ranges
-// Returns EC2 IpRange and Ipv6Range slices for use in security group rules
-func separateIPv4AndIPv6CIDRs(cidrs []string) ([]ec2types.IpRange, []ec2types.Ipv6Range) {
-	var ipv4Ranges []ec2types.IpRange
-	var ipv6Ranges []ec2types.Ipv6Range
-
-	for _, cidr := range cidrs {
-		_, ipNet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			klog.Warningf("Failed to parse CIDR %q: %v", cidr, err)
-			continue
-		}
-
-		// Check if this is an IPv4 or IPv6 CIDR
-		if ipNet.IP.To4() != nil {
-			// IPv4
-			ipv4Ranges = append(ipv4Ranges, ec2types.IpRange{CidrIp: aws.String(cidr)})
-		} else {
-			// IPv6
-			ipv6Ranges = append(ipv6Ranges, ec2types.Ipv6Range{CidrIpv6: aws.String(cidr)})
-		}
+// nlbListenerIPProtocol maps an NLB listener protocol to the IP protocol used
+// for EC2 security group ingress rules. NLB listeners are TCP, UDP, or TLS;
+// TLS runs over TCP, so anything that is not UDP maps to tcp. This avoids
+// passing "tls" to AuthorizeSecurityGroupIngress, which EC2 rejects with
+// "Invalid value 'tls' for IP protocol".
+func nlbListenerIPProtocol(protocol elbv2types.ProtocolEnum) string {
+	if protocol == elbv2types.ProtocolEnumUdp {
+		return "udp"
 	}
-
-	return ipv4Ranges, ipv6Ranges
+	return "tcp"
 }
 
 // ensureNLBSecurityGroupRules ensures the NLB frontend security group rules are created and configured
@@ -2369,42 +2340,28 @@ func separateIPv4AndIPv6CIDRs(cidrs []string) ([]ec2types.IpRange, []ec2types.Ip
 // Parameters:
 //   - ctx: The context for the request.
 //   - securityGroupID: The managed security group ID to attach rules to (empty string skips rule attachment).
-//   - sourceCIDRs: The CIDR ranges (IPv4 and/or IPv6) allowed to access the load balancer.
+//   - ec2SourceRanges: The CIDR ranges allowed to access the load balancer.
 //   - v2Mappings: The NLB port mappings defining frontend ports and protocols.
 //
 // Returns:
 //   - error: An error if any issue occurs while ensuring the NLB security group rules.
-func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, securityGroupID string, sourceCIDRs []string, v2Mappings []nlbPortMapping) error {
+func (c *Cloud) ensureNLBSecurityGroupRules(ctx context.Context, securityGroupID string, ec2SourceRanges []ec2types.IpRange, v2Mappings []nlbPortMapping) error {
 	if securityGroupID == "" {
 		return nil
 	}
 
-	// Separate source CIDRs into IPv4 and IPv6 ranges
-	ec2SourceRanges, ec2Ipv6SourceRanges := separateIPv4AndIPv6CIDRs(sourceCIDRs)
-
 	// Build ingress rules from NLB port mappings
 	ingressRules := NewIPPermissionSet()
 	for _, mapping := range v2Mappings {
-		permission := ec2types.IpPermission{
+		ingressRules.Insert(ec2types.IpPermission{
 			FromPort:   aws.Int32(int32(mapping.FrontendPort)),
 			ToPort:     aws.Int32(int32(mapping.FrontendPort)),
-			IpProtocol: aws.String(strings.ToLower(string((mapping.FrontendProtocol)))),
-		}
-
-		// Add IPv4 ranges if present
-		if len(ec2SourceRanges) > 0 {
-			permission.IpRanges = ec2SourceRanges
-		}
-
-		// Add IPv6 ranges if present
-		if len(ec2Ipv6SourceRanges) > 0 {
-			permission.Ipv6Ranges = ec2Ipv6SourceRanges
-		}
-
-		ingressRules.Insert(permission)
+			IpProtocol: aws.String(nlbListenerIPProtocol(mapping.FrontendProtocol)),
+			IpRanges:   ec2SourceRanges,
+		})
 	}
 
-	return c.createSecurityGroupRules(ctx, securityGroupID, ingressRules, ec2SourceRanges, ec2Ipv6SourceRanges)
+	return c.createSecurityGroupRules(ctx, securityGroupID, ingressRules, ec2SourceRanges)
 }
 
 // EnsureLoadBalancer implements LoadBalancer.EnsureLoadBalancer
@@ -2422,10 +2379,6 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		annotations: annotations,
 	}); err != nil {
 		return nil, err
-	}
-
-	if !isNLB(annotations) && !canFallbackToIPv4(apiService) {
-		return nil, fmt.Errorf("classic load balancer for service %s does not support IPv6", apiService.Name)
 	}
 
 	if apiService.Spec.SessionAffinity != v1.ServiceAffinityNone {
@@ -2448,18 +2401,9 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 	if err != nil {
 		return nil, err
 	}
-
-	sourceCIDRs := sourceRanges.StringSlice()
-
-	// If no source ranges specified, add defaults based on service IP families
-	// This should be populated by GetLoadBalancerSourceRanges most of the time.
-	if len(sourceCIDRs) == 0 {
-		sourceCIDRs = append(sourceCIDRs, "0.0.0.0/0")
-	}
-
-	// Add IPv6 default range if service supports IPv6.
-	if serviceRequestsIPv6(apiService) && !contains(sourceCIDRs, "::/0") {
-		sourceCIDRs = append(sourceCIDRs, "::/0")
+	ec2SourceRanges := []ec2types.IpRange{}
+	for _, srcRange := range sourceRanges.StringSlice() {
+		ec2SourceRanges = append(ec2SourceRanges, ec2types.IpRange{CidrIp: aws.String(srcRange)})
 	}
 
 	sslPorts := getPortSets(annotations[ServiceAnnotationLoadBalancerSSLPorts])
@@ -2565,7 +2509,6 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			internalELB,
 			annotations,
 			securityGroupIDs,
-			apiService,
 		)
 		if err != nil {
 			return nil, err
@@ -2573,7 +2516,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 
 		// Ensure SG rules for cluster-owned groups, only if the LB reconciliator finished successfully.
 		if isManagedSg && len(securityGroupIDs) > 0 {
-			if err := c.ensureNLBSecurityGroupRules(ctx, securityGroupIDs[0], sourceCIDRs, v2Mappings); err != nil {
+			if err := c.ensureNLBSecurityGroupRules(ctx, securityGroupIDs[0], ec2SourceRanges, v2Mappings); err != nil {
 				return nil, fmt.Errorf("error ensuring NLB security group rules: %w", err)
 			}
 		}
@@ -2613,10 +2556,6 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 		}
 		if len(sourceRangeCidrs) == 0 {
 			sourceRangeCidrs = append(sourceRangeCidrs, "0.0.0.0/0")
-			// Add IPv6 default range if service supports IPv6
-		}
-		if serviceRequestsIPv6(apiService) && !contains(sourceRangeCidrs, "::/0") {
-			sourceRangeCidrs = append(sourceRangeCidrs, "::/0")
 		}
 
 		err = c.updateInstanceSecurityGroupsForNLB(ctx, loadBalancerName, instances, subnetCidrs, sourceRangeCidrs, v2Mappings)
@@ -2763,9 +2702,6 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 	}
 
 	if setupSg {
-		// Separate source CIDRs into IPv4 and IPv6 ranges for classic ELB
-		ec2SourceRanges, ec2Ipv6SourceRanges := separateIPv4AndIPv6CIDRs(sourceCIDRs)
-
 		permissions := NewIPPermissionSet()
 		for _, port := range apiService.Spec.Ports {
 			protocol := strings.ToLower(string(port.Protocol))
@@ -2779,7 +2715,7 @@ func (c *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, apiS
 			permissions.Insert(permission)
 		}
 
-		if err = c.createSecurityGroupRules(ctx, securityGroupIDs[0], permissions, ec2SourceRanges, ec2Ipv6SourceRanges); err != nil {
+		if err = c.createSecurityGroupRules(ctx, securityGroupIDs[0], permissions, ec2SourceRanges); err != nil {
 			return nil, err
 		}
 	}
@@ -3528,6 +3464,11 @@ func (c *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, serv
 func (c *Cloud) getInstanceByID(ctx context.Context, instanceID string) (*ec2types.Instance, error) {
 	instances, err := c.getInstancesByIDs(ctx, []string{instanceID})
 	if err != nil {
+		// A DescribeInstances by ID for an instance that no longer exists returns
+		// an InvalidInstanceID.NotFound error rather than an empty result.
+		if IsAWSErrorInstanceNotFound(err) {
+			return nil, cloudprovider.InstanceNotFound
+		}
 		return nil, err
 	}
 
