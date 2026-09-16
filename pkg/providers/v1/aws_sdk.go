@@ -86,12 +86,8 @@ func (p *awsSDKProvider) AddMiddleware(ctx context.Context, regionName string, c
 
 	p.addAPILoggingMiddleware(cfg)
 
-	// Record AWS API response status codes and error codes as metrics.
-	cfg.APIOptions = append(cfg.APIOptions,
-		func(stack *smithymiddleware.Stack) error {
-			return stack.Deserialize.Add(awsAPIMetricsMiddleware(), smithymiddleware.After)
-		},
-	)
+	// Record the status code of AWS API calls that fail terminally as metrics.
+	cfg.APIOptions = append(cfg.APIOptions, addAWSAPIMetricsMiddleware)
 }
 
 // Adds logging middleware for AWS SDK Go V2 clients

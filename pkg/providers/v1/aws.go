@@ -41,7 +41,6 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/smithy-go"
-	smithymiddleware "github.com/aws/smithy-go/middleware"
 	"gopkg.in/gcfg.v1"
 
 	v1 "k8s.io/api/core/v1"
@@ -521,9 +520,7 @@ func init() {
 		var creds *stscreds.AssumeRoleProvider
 		if cfg.Global.RoleARN != "" {
 			stsClient, err := services.NewStsClient(ctx, regionName, cfg.Global.RoleARN, cfg.Global.SourceARN,
-				func(stack *smithymiddleware.Stack) error {
-					return stack.Deserialize.Add(awsAPIMetricsMiddleware(), smithymiddleware.After)
-				},
+				addAWSAPIMetricsMiddleware,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create sts v2 client: %v", err)
@@ -3528,6 +3525,11 @@ func (c *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, serv
 func (c *Cloud) getInstanceByID(ctx context.Context, instanceID string) (*ec2types.Instance, error) {
 	instances, err := c.getInstancesByIDs(ctx, []string{instanceID})
 	if err != nil {
+		// A DescribeInstances by ID for an instance that no longer exists returns
+		// an InvalidInstanceID.NotFound error rather than an empty result.
+		if IsAWSErrorInstanceNotFound(err) {
+			return nil, cloudprovider.InstanceNotFound
+		}
 		return nil, err
 	}
 

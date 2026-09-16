@@ -2,6 +2,7 @@ package tagging
 
 import (
 	"context"
+
 	cloudprovider "k8s.io/cloud-provider"
 	"k8s.io/cloud-provider/app"
 	cloudcontrollerconfig "k8s.io/cloud-provider/app/config"
@@ -43,7 +44,7 @@ func (tc *ControllerWrapper) startTaggingController(ctx context.Context, initCon
 		completedConfig.SharedInformers.Core().V1().Nodes(),
 		completedConfig.ClientBuilder.ClientOrDie(initContext.ClientName),
 		cloud,
-		completedConfig.ComponentConfig.KubeCloudShared.NodeMonitorPeriod.Duration,
+		completedConfig.ComponentConfig.NodeLifecycleController.NodeMonitorPeriod.Duration,
 		tc.Options.Tags,
 		tc.Options.Resources,
 		tc.Options.RateLimit,
