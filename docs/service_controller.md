@@ -10,6 +10,7 @@ The service controller is responsible for watch for service and node object chan
 | service.beta.kubernetes.io/aws-load-balancer-access-log-s3-bucket-name         | -                                   | -   | ELB | Access log S3 bucket name.  |
 | service.beta.kubernetes.io/aws-load-balancer-access-log-s3-bucket-prefix       | -                                   | -   | ELB | Access log S3 bucket prefix.  |
 | service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags          | Comma-separated list of key=value   | -   | ELB,NLB | A comma-separated list of key-value pairs which will be recorded as additional tags in the ELB. For example: "Key1=Val1,Key2=Val2,KeyNoVal1=,KeyNoVal2" |
+| service.beta.kubernetes.io/aws-load-balancer-alpn-policy                       | [HTTP1Only\|HTTP2Only\|HTTP2Optional\|HTTP2Preferred\|None] | None | NLB | Specifies the [ALPN policy](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/create-tls-listener.html#alpn-policies) for a TLS listener on an NLB. Only applies when `aws-load-balancer-ssl-cert` is also set. |
 | service.beta.kubernetes.io/aws-load-balancer-backend-protocol                  | [http\|https\|ssl\|tcp]             | tcp                       | ELB | Specifies the protocol spoken by the backend (pod) behind a listener. If set to `http` and the `aws-load-balancer-ssl-cert` annotation is missing or its value is empty (`""`), an HTTP listener is created; if set to `http` or `https` and the `aws-load-balancer-ssl-cert`annotation is also present, an HTTPS listener is created to terminate SSL and parse headers. If set to `ssl` or `tcp`, a "raw" SSL/TCP listener is used. if the annotation is missing, its value is empty (`""`), or set to `https` without the `aws-load-balancer-ssl-cert`annotation also being present, the default protocol is assumed to be `tcp`. |
 | service.beta.kubernetes.io/aws-load-balancer-connection-draining-enabled       | [true\|false]                       | -   | ELB | Enable [connection draining](https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/config-conn-drain.html). |
 | service.beta.kubernetes.io/aws-load-balancer-connection-draining-timeout       | [1-3600]                            | 300 | ELB | The maximum time (in seconds) for the load balancer to keep connections alive before reporting the instance as de-registered. The maximum timeout value can be set between 1 and 3,600 seconds (the default is 300 seconds). When the maximum time limit is reached, the load balancer forcibly closes connections to the de-registering instance. |
@@ -87,64 +88,45 @@ metadata:
 [...]
 ```
 
-## Dual stack services with IPv6
+## External Load Balancer Management
 
-Services can be created using solely IPv4 networking (the default), or with dual stack support per the [Kubernetes Service specification](https://kubernetes.io/docs/concepts/services-networking/dual-stack/).
-The service must be created with a Network Load Balancer, and the Kubernetes control plane must be configured to support IPv6 CIDRs.
+The `service.beta.kubernetes.io/aws-load-balancer-type` annotation also supports values that indicate the load balancer should be managed externally rather than by the cloud provider:
 
-Note: When using the [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/), Services will default to having the `spec.loadBalancerClass` field populated via a MutatingWebhookConfiguration.
-This webhook must be disabled to allow the cloud controller manager to handle services.
+- **`nlb-ip`** or **`external`**: Indicates that the load balancer will be managed externally (e.g., by another controller or manually)
 
-Some limitations to be aware of when using dual stack load balancers:
+When either of these values is set, the cloud provider controller will:
 
-- The `spec.ipFamilies` field can have a second family added or removed, but the first entry is immutable after Service creation.
-- Load balanced targets are registered based on the instances, not their IP addresses.
-- A Service cannot be IPv6 only; it must either be IPv4 or dual stack, even if IPv6 is the only IP family specified.
+- Skip load balancer creation
+- Skip load balancer updates
+- Skip load balancer deletion
+- Return no load balancer status
 
-### Usage Example 1 - creating a dual stack load balancer, requiring both stacks
+### Use Cases
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: $SVC_NAME
-  namespace: ${APP_NAMESPACE}
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: nlb
-spec:
-    type: LoadBalancer
-    ipFamilies:
-        - IPv6
-        - IPv4
-    ipFamilyPolicy: RequireDualStack # Require both stacks are present on the service.
-    selector:
-        app: myapp
-    ports:
-        - port: 80
-          targetPort: 8080
-          protocol: TCP
-```
+This annotation is useful when transitioning load balancer management away from the cloud provider:
 
-### Usage Example 2 - creating a dual stack load balancer, falling back to IPv4
+- **Manual Management:** When you prefer to manage load balancers manually through AWS console, CLI, or Terraform, set the annotation to prevent the cloud provider from interfering with your manually managed resources.
+- **Orphaning:** When you need to keep an existing load balancer in AWS but remove it from Kubernetes management, set the annotation before removing the service finalizer and deleting the service.
+
+### Usage Example
+
+The following Service example shows how to configure a Service for external load balancer management:
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: $SVC_NAME
-  namespace: ${APP_NAMESPACE}
+  name: my-service
+  namespace: default
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-type: external
 spec:
-    type: LoadBalancer
-    ipFamilies:
-        - IPv4
-        - IPv6
-    ipFamilyPolicy: PreferDualStack # If dual stack is not configured or present, fall back to IPv4.
-    selector:
-        app: myapp
-    ports:
-        - port: 80
-          targetPort: 8080
-          protocol: TCP
+  selector:
+    app: my-app
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: LoadBalancer
 ```
+
+> Note: When using `nlb-ip` or `external`, the cloud provider will not create, update, or delete any AWS resources for services with these annotation values. You must ensure that the load balancer resources are managed through other means (e.g., manually through AWS console/CLI, or through IaC tools like Terraform).
