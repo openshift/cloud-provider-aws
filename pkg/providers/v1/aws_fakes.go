@@ -34,7 +34,6 @@ import (
 	elb "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
-	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"k8s.io/klog/v2"
 
@@ -330,10 +329,37 @@ func (ec2i *FakeEC2Impl) CreateSubnet(request *ec2types.Subnet) (*ec2.CreateSubn
 	return response, nil
 }
 
-// DescribeSubnets returns fake subnet descriptions
+// DescribeSubnets returns fake subnet descriptions. Only the vpc-id filter is
+// honored, all other filters are ignored.
 func (ec2i *FakeEC2Impl) DescribeSubnets(ctx context.Context, request *ec2.DescribeSubnetsInput, optFns ...func(*ec2.Options)) ([]ec2types.Subnet, error) {
 	ec2i.DescribeSubnetsInput = request
-	return ec2i.Subnets, nil
+	matches := []ec2types.Subnet{}
+	for _, subnet := range ec2i.Subnets {
+		if !subnetMatchesVPCFilter(subnet, request.Filters) {
+			continue
+		}
+		matches = append(matches, subnet)
+	}
+	return matches, nil
+}
+
+func subnetMatchesVPCFilter(subnet ec2types.Subnet, filters []ec2types.Filter) bool {
+	for _, filter := range filters {
+		if aws.ToString(filter.Name) != "vpc-id" {
+			continue
+		}
+		found := false
+		for _, value := range filter.Values {
+			if value == aws.ToString(subnet.VpcId) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // RemoveSubnets clears subnets on client
@@ -688,8 +714,7 @@ func (e *FakeELB) ModifyLoadBalancerAttributes(ctx context.Context, input *elb.M
 
 // FakeELBV2 is a fake ELBV2 client used for testing
 type FakeELBV2 struct {
-	aws           *FakeAWSServices
-	IpAddressType elbv2types.IpAddressType
+	aws *FakeAWSServices
 }
 
 // AddTags is not implemented but is required for interface conformance
@@ -721,12 +746,6 @@ func (elb *FakeELBV2) DeleteLoadBalancer(ctx context.Context, input *elbv2.Delet
 // SetSecurityGroups is not implemented but is required for interface conformance
 func (elb *FakeELBV2) SetSecurityGroups(ctx context.Context, input *elbv2.SetSecurityGroupsInput, optFns ...func(*elbv2.Options)) (*elbv2.SetSecurityGroupsOutput, error) {
 	panic("Not implemented")
-}
-
-// SetIpAddressType stores the given IpAddressType for later inspection and returns success.
-func (elb *FakeELBV2) SetIpAddressType(ctx context.Context, input *elbv2.SetIpAddressTypeInput, optFns ...func(*elbv2.Options)) (*elbv2.SetIpAddressTypeOutput, error) {
-	elb.IpAddressType = input.IpAddressType
-	return &elbv2.SetIpAddressTypeOutput{IpAddressType: input.IpAddressType}, nil
 }
 
 // ModifyLoadBalancerAttributes is not implemented but is required for interface conformance
@@ -881,6 +900,7 @@ func contains(haystack []string, needle string) bool {
 
 // DescribeNetworkInterfaces returns list of ENIs for testing
 func (ec2i *FakeEC2Impl) DescribeNetworkInterfaces(ctx context.Context, input *ec2.DescribeNetworkInterfacesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeNetworkInterfacesOutput, error) {
+	ec2i.aws.countCall("ec2", "DescribeNetworkInterfaces", "")
 	fargateNodeNamePrefix := "fargate-"
 	networkInterface := []ec2types.NetworkInterface{
 		{
